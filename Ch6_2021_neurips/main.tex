@@ -1,0 +1,623 @@
+\graphicspath{{Ch6_2021_neurips/figs/}}
+
+\chapter{{Parameter Prediction for Unseen Deep Architectures}\label{ch:neurips2021}}
+
+\input{Ch6_2021_neurips/prolog}
+
+\section{Introduction}
+
+Consider the problem of training deep neural networks on large annotated datasets, 
+such as ImageNet~\citep{russakovsky2015imagenet}. This problem can be formalized as finding optimal parameters for a given neural network $a$, parameterized by $\w$, w.r.t. a loss function $\loss$ on the dataset $\domain=\{(\bx_i, y_i)\}_{i=1}^N$ of inputs $\bx_i$ and targets $y_i$:\looseness-1
+%
+\begin{equation}
+\label{eq:optim1b}
+\underset{\w}{\text{arg\,min }}\sum\nolimits_{i=1}^N \loss(f(\bx_i; \f, \w), y_i),
+\end{equation}
+%
+where $f(\bx_i; a, \w)$ represents a forward pass.
+\eqref{eq:optim1b} is usually minimized by iterative optimization algorithms -- e.g. SGD~\citep{ruder2016overview} and Adam~\citep{kingma2014adam}
+-- that converge to performant parameters $\w_p$ of the architecture $\f$. Despite the progress in improving the training speed and convergence~\citep{huang2016deep,brock2017freezeout,choi2019faster,ioffe2015batch}, obtaining $\w_p$ remains a bottleneck in large-scale machine learning pipelines. For example, training a ResNet-50~\citep{he2016deep} on ImageNet can take many GPU hours~\citep{nvidia}. With the ever growing size of networks~\citep{brown2020language} and necessity of training the networks repeatedly (e.g.~for hyperparameter or architecture search), the classical process of obtaining $\w_p$ is becoming computationally unsustainable~\citep{strubell2019energy,cai2019onceforall,thompson2020computational}. 
+
+\textbf{A new parameter prediction task.}
+When optimizing the parameters for a \textit{new} architecture $\f$, typical optimizers disregard past experience gained by optimizing other nets. However, leveraging this past experience can be the key to reduce the reliance on iterative optimization and, hence the high computational demands.
+To progress in that direction, we propose a new task where iterative optimization is replaced with a \textit{single forward pass} of a hypernetwork~\citep{ha2016hypernetworks} $H_\domain$.
+To tackle the task, $H_\domain$ is expected to leverage the knowledge of how to optimize \textit{other}	networks $\nets$.
+Formally, the task is to predict the parameters of an \textit{unseen} architecture $\f \notin \nets$ using $H_\domain$, parameterized by $\theta_p$: $\hat{\w}_p=H_{\domain}(\f; \theta_p)$.
+The task is constrained to a dataset $\domain$, so $\hat{\w}_p$ are the predicted parameters for which the test set performance of $f(\bx; \f, \hat{\w}_p)$ is similar to the one of $f(\bx; \f, \w_p)$.
+For example, we consider CIFAR-10~\citep{krizhevsky2009learning} and ImageNet image classification datasets $\domain$, where the test set performance is classification accuracy on test images.\looseness-1
+
+\textbf{Approaching our task.}
+A straightforward approach to expose $H_\domain$ to the knowledge of how to optimize other networks is to train it on a large training set of $\{(a_i, \w_{p,i})\}$ pairs, however, that is prohibitive\footnote{Training a single network $a_i$ can take several GPU days and thousands of trained networks may be required.\looseness-1}. Instead, we follow the bi-level optimization paradigm common in meta-learning~\citep{hospedales2020meta,andrychowicz2016learning,ravi2016optimization}, but rather than iterating over $M$ tasks, we iterate over $M$ training architectures $\nets=\{a_i\}_{i=1}^M$:\looseness-1
+%
+\begin{equation}
+\label{eq:solution}
+\underset{\theta}{\text{arg\,min }} \sum\nolimits_{j=1}^N \sum\nolimits_{i=1}^{M}\loss\Big(f\Big( \bx_j; a_i,  H_\domain(a_i;{\theta})\Big), y_j\Big).
+\end{equation}
+
+By optimizing \eqref{eq:solution}, the hypernetwork $H_{\domain}$ gradually gains knowledge of how to predict performant parameters for training architectures. It can then leverage this knowledge at test time -- when predicting parameters for \textit{unseen} architectures. 
+To approach the problem in \eqref{eq:solution}, we need to design the network space $\nets$ and $H_{\domain}$.
+For $\nets$, we rely on the previous design spaces for neural architectures~\citep{liu2018darts} that we extend
+in two ways: the ability to sample distinct architectures and an expanded design space that includes diverse architectures, such as ResNets and Visual Transformers~\citep{dosovitskiy2020image}. 
+Such architectures can be fully described in the form of computational graphs (\fig{\ref{fig:ghn_overview}}). So, to design the hypernetwork $H_{\domain}$, we rely on recent advances in machine learning on graph-structured data~\citep{kipf2016semi,velickovic2017graph,dwivedi2020benchmarking,zhang2018graph}.
+In particular, we build on the Graph HyperNetworks method (GHNs)~\citep{zhang2018graph} that also optimizes \eqref{eq:solution}. However, GHNs do not aim to predict large-scale performant parameters as we do in this work, which motivates us to improve on their approach.\looseness-1
+
+By designing our diverse space $\nets$ and improving on GHNs, we boost the accuracy achieved by the predicted parameters on \textit{unseen} architectures to 77\% (top-1) and 48\% (top-5) on CIFAR-10~\citep{krizhevsky2009learning} and ImageNet~\citep{russakovsky2015imagenet}, respectively. Surprisingly, our GHN shows good out-of-distribution generalization and predicts good \params for architectures that are much larger and deeper compared to the ones seen in training. For example, we can predict all 24 million parameters of ResNet-50 in less than a second either on a GPU or CPU achieving $\sim$60\% on CIFAR-10 without any gradient updates (Fig~\ref{fig:ghn_overview}, (b)).\looseness-1
+
+Overall, our framework and results pave the road toward a new and significantly more efficient paradigm for training networks.
+Our \textbf{contributions} are as follows: (\textbf{a}) we introduce the novel task of predicting performant \params for diverse feedforward neural networks with a single hypernetwork forward pass;
+(\textbf{b}) we introduce \dataset~-- a standardized benchmark with in-distribution and out-of-distribution architectures to track progress on the task (\S~\ref{sec:dataset}); (\textbf{c}) we define several baselines and propose a GHN model (\S~\ref{sec:ghn_model}) that performs surprisingly well on CIFAR-10 and ImageNet (\S~\ref{sec:our_task}); (\textbf{d}) we show that our model learns a strong representation of neural network architectures (\S~\ref{sec:prop_pred}), and our model is useful for initializing neural networks (\S~\ref{sec:finetune}).
+Our \dataset dataset, trained GHNs and code is available at \textcolor{violet}{\url{https://github.com/facebookresearch/ppuda}}.
+
+\begin{figure}[tbhp]
+	\centering
+	\small 
+	\setlength{\tabcolsep}{2pt}
+	\vspace{-7pt}
+	\begin{tabular}{cc}
+		\multirow{2}{*}{\includegraphics[width=0.75\textwidth,align=c,trim={0 0 0 0}, clip]{overview_ghn2.pdf}} & \parbox{3cm}{\vspace{10pt} \scriptsize \centering Example of evaluating on an unseen architecture $a \notin \nets$ (ResNet-50)}\\
+		& \includegraphics[width=0.22\textwidth,align=c,trim={0 0 0 0}, clip]{resnet_fig1.pdf} \vspace{5pt}\\
+		(a) & (b) \\
+	\end{tabular}
+	\vspace{-5pt}
+	\caption{\small \textbf{(a)} Overview of our GHN model (\S~\ref{sec:ghn_model}) trained by backpropagation through the predicted parameters ($\hat{\w}_p$) on a given image dataset and our \dataset dataset of architectures. Colored captions show our key improvements to vanilla GHNs (\S~\ref{sec:bg_ghn}). The red one is used only during training GHNs, while the blue ones are used both at training and testing time. The computational graph of $a_1$ is visualized as described in Table~\ref{tab:graphs}. \textbf{(b)} Comparing classification accuracies when all the parameters of a ResNet-50 are predicted by GHNs versus when its parameters are trained with SGD (see full results in \S~\ref{sec:ghn_exper}).
+	}
+	\label{fig:ghn_overview}
+	\vspace{-15pt}
+\end{figure}
+
+\section{Background\label{sec:problem}}
+
+We start by providing a brief background about the network design spaces leveraged in the creation of our \dataset dataset of neural architectures described in \S~\ref{sec:dataset}. We then cover elements of graph hypernetworks that we leverage when designing our specific GHN $H_\domain$ in \S~\ref{sec:ghn_model}.
+
+\subsection{Network design space of DARTS\label{sec:bg_darts}}
+
+DARTS~\citep{liu2018darts} is a differentiable NAS framework. For image classification tasks such as those considered in this work, its networks are defined by four types of building blocks: \emph{stems}, \emph{normal cells},  \emph{reduction cells}, and \emph{classification heads}. Stems are fixed blocks of convolutional operations that process input images. 
+The normal and reduction cells are the main blocks of architectures and are composed of: 
+3$\PLH$3 and 5$\PLH$5 separable convolutions,
+3$\PLH$3 and 5$\PLH$5 dilated separable convolutions, 
+3$\PLH$3 max pooling,  3$\PLH$3 average pooling, identity and zero (to indicate the absence of connectivity between two operations). Finally, the classification head defines the network output and is built with a global pooling followed by a single fully connected layer.
+
+Typically, DARTS networks have one stem block, 14-20 cells, and one classification head, altogether forming a deep computational graph. The reduction cells, placed only at 1/3 and 2/3 of the total depth, decrease the spatial resolution and increase the channel dimensionality by a factor of 2. Summation and concatenation are used to aggregate outputs from multiple operations within each cell. To make the channel dimensionalities match, 1$\PLH$1 convolutions are used as needed. All convolutional operations use the ReLU-Conv-Batch Norm (BN)~\citep{ioffe2015batch} order. Overall, DARTS enables defining strong architectures that combine many principles of manual~\citep{simonyan2014very,he2016deep,xie2017aggregated,huang2017densely} and automatic~\citep{zhang2018graph,zoph2016neural,zoph2018learning,liu2018progressive,real2019regularized,chen2019progressive,howard2019searching} design of neural architectures. While DARTS learns the optimal task-specific cells, the framework can be modified to permit sampling randomly-structured cells. We leverage this possibility for the \dataset construction in \S~\ref{sec:dataset}.
+%Please see \S~\ref{apdx:darts_bg} for further details on DARTS.
+\looseness-1
+
+
+\subsection{Graph hypernetwork: \ghnbase\label{sec:bg_ghn}}
+
+\paragraph{Representation of architectures.} GHNs~\citep{zhang2018graph} directly operate on the computational graph of a neural architecture $\f$. Specifically, $\f$ is a directed acyclic graph (DAG), where nodes $V =\{v_i\}_{i=1}^{|V|}$ are operations (e.g. convolutions, fully-connected layers, summations, etc.) and their connectivity is described by a binary adjacency matrix $\mathbf{A}\in \{0,1\}^{|V|\times |V|}$. Nodes are further characterized by a matrix of initial node features $\mathbf{H}^{0}=[\h_1^{0}, \h_2^{0}, ..., \h_{|V|}^{0}]$, where each $\h_v^{0}$ is a one-hot vector representing the operation performed by the node. 
+We also use such a one-hot representation for $\mathbf{H}^{0}$, but in addition encode the shape of parameters associated with nodes.
+%as described in detail in \S~\ref{apdx:ghn_1}.\looseness-1
+
+\paragraph{Design of the graph hypernetwork.} In~\citep{zhang2018graph}, the graph hypernetwork $H_\domain$ consists of three key modules. The first module takes the input node features $\mathbf{H}^{0}$ and transforms them into $d$-dimensional node features $\mathbf{H}^{1} \in \mathbb{R}^{|V| \times d}$ through an embedding layer. The second module takes $\mathbf{H}^{1}$ together with $\mathbf{A}$ and feeds them into a specific variant of the gated graph neural network (GatedGNN)~\citep{li2015gated}. In particular, their GatedGNN mimics the canonical order $\pi$ of node execution in the forward (fw) and backward (bw) passes through a computational graph.
+To do so, it sequentially traverses the graph and performs iterative message passing operations and node feature updates as follows: 
+%
+\begin{align}
+\label{eq:ghn_prop}
+\forall t \in [1,...,T]:  \Big[ \forall \pi \in [\text{fw},\text{bw}]: \Big( \forall v \in \pi: \mathbf{m}^t_v = \sum\limits_{u \in \neigh_{v}^{\pi}} \text{MLP}(\mathbf{h}^{t}_u), \ \ \mathbf{\mathbf{h}}^{t}_v = \text{GRU}(\mathbf{h}_v^t, \mathbf{m}_v^t) \Big) \Big],
+\end{align}
+%   
+where $T$ denotes the total number of forward-backward passes; $\mathbf{h}_v^t$ corresponds to the features of node $v$ in the $t$-th graph traversal; $\text{MLP}(\cdot)$ is a multi-layer perceptron; and $\text{GRU}(\cdot)$ is the update function of the Gated Recurrent Unit~\citep{cho2014learning}. In the forward propagation ($\pi=\text{fw}$), $\neigh_v^{\pi}$ corresponds to the incoming neighbors of the node defined by $\mathbf{A}$, then in the backward propagation ($\pi=\text{bw}$) it similarly corresponds to the outgoing neighbors of the node. The last module uses the GatedGNN output hidden states $\mathbf{h}_v^T$ to condition a decoder that produces the parameters $\hat{\w}_{p}^{v}$ (e.g. convolutional weights) associated with each node. 
+In practice, to handle different parameter dimensionalities per operation type, the output of the hypernetwork is reshaped and sliced according to the shape of parameters in each node. We refer to the model described above as \ghnbase~(\fig{\ref{fig:ghn_overview}}). Further subtleties of implementing this model in the context of our task can be found in our source code.
+% discussed in \S~\ref{apdx:ghn_1}.
+
+\paragraph{How do graph hypernetworks learn?}
+
+It may be not obvious why GHNs allow us to optimize such a difficult objective of learning to predict performant parameters \eqref{eq:solution}. In particular, perhaps the most surprising working principle behind training GHNs is that we sample a new architecture for each training iteration. 
+This comes as a striking contrast to training a standard machine learning objective \eqref{eq:optim1b} that requires thousands or millions optimization steps just for a single architecture.
+How is it possible that GHNs learn from just a single optimization step on each architecture?
+
+There is no clear answer to this question in the literature so far. To provide a high-level answer we can draw an analogy between the \textit{distribution of images} used to train a neural network in~\eqref{eq:optim1b} and the \textit{distribution of architectures} used to train GHNs in~\eqref{eq:solution}. In \eqref{eq:optim1b}, when we train the parameters of a single network using SGD, we sample new images for each training iteration. While we can run optimization for the same images for more than one iteration, this is considered to be poor practice that will likely lead to overfitting. 
+So typically we sample new images for each training iteration, however it is critical that at each iteration the images are drawn from the same distribution. This way the neural network gradually captures the regularities in the distribution of images to make better predictions in the subsequent steps. If we sample drastically different images for each training iteration (\eg natural images in the first iteration, medical images in the second iteration, then some binary QR codes, etc.), then \eqref{eq:optim1b} would be hard or impossible to optimize.
+The same principle may be the key to enable training GHNs.
+At each training iteration, a GHN slightly improves its parameters (by gradient descent) w.r.t. a single architecture sampled from some distribution.
+If there are regularities in this distribution and the GHN can capture them, then the improvements of GHN parameters in the previous steps can result in improvements for the new architectures in the next steps as long as all the architectures are sampled from the same distribution. In terms of gradient descent, the direction of parameter updates of the GHN computed for a single architecture can be useful for the entire distribution of architectures. By following this direction using gradient descent, the GHN can gradually improve over time on the entire distribution.
+These improvements depend heavily on the shape of the training distribution. We need to make sure that this distribution has strong regularities to enable training of GHNs, but at the same time has diverse enough samples to enable generalization (prediction of performant parameter for unseen architectures). The design of such a distribution is described in the next section.
+
+
+%Instead of observing the same image repeatedly, we generally aim to observe more diverse images to improve generalization.
+
+\vspace{-5pt}
+\section{DeepNets-1M\label{sec:dataset}}
+\vspace{-5pt}
+
+The network design space of DARTS is limited by the number of unique operations that compose cells, and the low variety of stems and classification heads. Thus, many architectures are not realizable within this design space, including: VGG~\citep{simonyan2014very}, ResNets~\citep{he2016deep}, MobileNet~\citep{howard2019searching} or more recent ones such as Visual Transformer (ViT)~\citep{dosovitskiy2020image} and Normalization-free networks~\citep{brock2021characterizing,brock2021high}.
+Furthermore, DARTS does not define a procedure to sample random architectures.	
+By addressing these two limitations we aim to expose our hypernetwork to diverse training architectures and permit its evaluation on common architectures, such as ResNet-50. We hypothesize that increased training diversity can improve hypernetworks' generalization to unseen architectures making it more competitive to iterative optimizers.\looseness-1
+
+\textbf{Extending the network design space.} We extend the set of possible operations with non-separable 2D convolutions\footnote{Non-separable convolutions have weights of e.g. shape 3$\PLH$3$\PLH$512$\PLH$512 as in ResNet-50. NAS works, such as DARTS and GHN, avoid such convolutions, since the separable ones~\citep{sifre2014rigid} are more efficient. Non-separable convolutions are nevertheless common in practice and can often boost the downstream performance.}, Squeeze\&Excite (SE\footnote{SE is common in many efficient networks~\citep{howard2017mobilenets,cai2019onceforall}.})~\citep{hu2018squeeze} and Transformer-based operations~\citep{vaswani2017attention,dosovitskiy2020image}: multihead self-attention (MSA), positional encoding and layer norm (LN)~\citep{ba2016layer}. 
+Each node (operation) in our graphs has two attributes: \emph{primitive type} (e.g. convolution) and \emph{shape} (e.g. 3$\PLH$3$\PLH$512$\PLH$512). Overall, our extended set consists of 15 primitive types (Table~\ref{tab:graphs}).
+We also extend the diversity of the generated architectures by introducing VGG-style classification heads and ViT stems. 
+Finally, to further increase architectural diversity, we allow the operations to not include batch norm (BN)~\citep{ioffe2015batch} and permit networks without channel width expansion (e.g. as in~\citep{dosovitskiy2020image}).\looseness-1
+
+\textbf{Architecture generation process.} We generate different subsets of architectures (see the description of each subset in the next two paragraphs and in Table~\ref{tab:graphs}). For each subset depending on its purpose, we predefine a range of possible model depths (number of cells), widths and number of nodes per cell. Then, we sample a stem, a normal and reduction cell and a classification head. The internal structure of the normal and reduction cells is defined by uniformly sampling from all available operations. 
+Due to a diverse design space it is extremely unlikely to sample the same architecture multiple times, but we ran a sanity check using the Hungarian algorithm~\citep{kuhn1955hungarian} to confirm that.
+%(see Figure~\ref{fig:vis_stats} in \S~\ref{apdx:stats} for details).\looseness-1
+
+\begin{table}[t!]
+	\centering
+	\vspace{-10pt}
+	\caption{\small Examples of computational graphs (visualized using NetworkX~\citep{hagberg2008exploring}) in each split and their key statistics, to which we add the average degree and average shortest path length often used to measure local and global graph properties respectively~\citep{barrat2004architecture,you2020graph}. In the visualized graphs, a node is one of the 15 primitives coded with markers shown at the bottom, where they are sorted by the frequency in the training set. For visualization purposes, a blue triangle marker differentiates a 1$\PLH$1 convolution (equivalent to a fully-connected layer over channels) from other convolutions, but its primitive type is still just convolution. \textsuperscript{*}Computed based on CIFAR-10.\looseness-1			
+	}
+	\vspace{-5pt}
+	\label{tab:graphs}
+	\tiny
+	\newcommand{\width}{0.135\textwidth}
+	\setlength{\tabcolsep}{0pt}
+	\begin{tabular}{p{1.7cm}ccp{0.2cm}ccccc}
+		\toprule
+		& \multicolumn{2}{c}{{\small \textbf{\textsc{In-Distribution}}}} & &
+		\multicolumn{5}{c}{{\small \textbf{\textsc{Out-of-Distribution}}}}
+		\Bstrut\Tstrut\\
+		\cline{2-3}\cline{5-9} \\[-2ex]
+		& \multicolumn{2}{c}{{\includegraphics[width=\width,align=c,trim={3cm 3cm 3cm 3cm},clip]{dag_train_5.pdf}}} & & {\includegraphics[width=\width,align=c,trim={2.3cm 3cm 2.3cm 3cm},clip]{dag_test_0.pdf}} & 
+		{\includegraphics[width=\width,align=c,trim={2.3cm 3cm 2.3cm 3cm},clip]{dag_ood_deep36_0.pdf}} & 
+		\includegraphics[width=\width,align=c,trim={2.3cm 3cm 2.3cm 3cm},clip]{dag_ood_conn_0.pdf} & 
+		{\includegraphics[width=\width,align=c,trim={2.3cm 3cm 2.3cm 3cm},clip]{dag_ood_nobn_0.pdf}} & 
+		{\includegraphics[width=\width,align=c,trim={2.3cm 3cm 2.3cm 3cm},clip]{dag_resnet_50.pdf}} 
+		\vspace{0pt}\Bstrut\\
+		& {\small \textbf{\iidtrain}} & {\small \textbf{\iidval/\iidtest}} & & {\small \textbf{\wide}} & {\small \textbf{\deep}} & {\small \textbf{\dense}} & {\small \textbf{\bnfree}} & \scriptsize \textbf{\textsc{ResNet/ViT}} \Bstrut\Tstrut\\
+		\cline{2-3}\cline{5-9}
+		\#graphs & $10^6$ & 500/500 & & 100 & 100 & 100 & 100 & 1/1\Tstrut\\
+		\#cells & 4-18 & 4-18 &  & 4-18 & \textbf{10-36} & 4-18 & 4-18 & 16/12 \\
+		\#channels & 16-128 & 32-128 & &  \textbf{128-1216} & 32-208 & 32-240 & 32-336 & 64/128 \\
+		\#nodes ($|V|$) & 21-827 & 33-579 &  & 33-579 & \textbf{74-1017} & \textbf{57-993} & 33-503 & 161/114\\
+		\% w/o BN & 3.5\% & 4.1\% &  & 4.1\% & 2.0\% & 5.0\% & \textbf{100\%} & 0\%/\textbf{100\%} \\
+		\#params(M)* & 0.01-3.1 & 2.5-35 & & \textbf{39-101} & 2.5-15.3 & 2.5-8.8 & 2.5-7.7 & \textbf{23.5}/1.0 \\
+		
+		avg degree & 2.3\std{0.1} & 2.3\std{0.1}  & & 2.3\std{0.1} & 2.3\std{0.1} & \textbf{2.4}\std{0.1} & \textbf{2.4}\std{0.1} & 2.2/2.3\\
+		
+		avg path & 14.5\std{4.8} & 14.5\std{4.9}  & & 14.7\std{4.9} & \textbf{26.2}\std{9.3} & 15.1\std{4.1} & 10.0\std{2.8} & 11.2/10.7\\			
+	\end{tabular}
+	\newcommand{\primwidth}{0.02\textwidth}
+	\newcolumntype{x}{>{\centering\arraybackslash\hspace{0pt}}p{0.7cm}}
+	\setlength{\tabcolsep}{2pt}
+	\begin{tabular}{lxxxxxxxxxxxxxxx}
+		\toprule
+		marker & \includegraphics[width=\primwidth,align=c,trim={0.2cm 0.2cm 0.2cm 0.2cm},clip]{primitive_conv.png} & \includegraphics[width=\primwidth,align=c,trim={0.2cm 0.2cm 0.2cm 0.2cm},clip]{primitive_bn.png} & \includegraphics[width=\primwidth,align=c,trim={0.2cm 0.2cm 0.2cm 0.2cm},clip]{primitive_sum.png} & \includegraphics[width=\primwidth,align=c,trim={0.2cm 0.2cm 0.2cm 0.2cm},clip]{primitive_fc-b.png} & \includegraphics[width=\primwidth,align=c,trim={0.2cm 0.2cm 0.2cm 0.2cm},clip]{primitive_sep_conv.png} & \includegraphics[width=\primwidth,align=c,trim={0.2cm 0.2cm 0.2cm 0.2cm},clip]{primitive_concat.png} & \includegraphics[width=\primwidth,align=c,trim={0.2cm 0.2cm 0.2cm 0.2cm},clip]{primitive_dil_conv.png} & \includegraphics[width=\primwidth,align=c,trim={0.2cm 0.2cm 0.2cm 0.2cm},clip]{primitive_ln.png} & \includegraphics[width=\primwidth,align=c,trim={0.2cm 0.2cm 0.2cm 0.2cm},clip]{primitive_max_pool.png} & \includegraphics[width=\primwidth,align=c,trim={0.2cm 0.2cm 0.2cm 0.2cm},clip]{primitive_avg_pool.png} & \includegraphics[width=\primwidth,align=c,trim={0.2cm 0.2cm 0.2cm 0.2cm},clip]{primitive_msa.png} & \includegraphics[width=\primwidth,align=c,trim={0.2cm 0.2cm 0.2cm 0.2cm},clip]{primitive_cse.png} & \includegraphics[width=\primwidth,align=c,trim={0.2cm 0.2cm 0.2cm 0.2cm},clip]{primitive_input.png} & \includegraphics[width=\primwidth,align=c,trim={0.2cm 0.2cm 0.2cm 0.2cm},clip]{primitive_glob_avg.png} & \includegraphics[width=\primwidth,align=c,trim={0.2cm 0.2cm 0.2cm 0.2cm},clip]{primitive_pos_enc.png}\Tstrut\\
+		
+		primitive & conv & BN & sum & bias & group conv & concat & \tiny dilat. gr. conv & LN & max pool & avg pool & MSA & SE & input & glob avg & pos enc \\
+		fraction in \iidtrain (\%) & 36.3 & 25.5 & 11.1 & 6.5 & 5.1 & 3.8 & 2.5 & 2.5 & 1.8 & 1.7 & 1.2 & 1.0 & 0.5 & 0.5 & 0.2 \\
+		\bottomrule
+	\end{tabular}
+\end{table}
+
+\textbf{In-distribution (\iid) architectures.} We generate a training set of $|\nets|=10^{6}$ architectures and validation/test sets of 500/500 architectures that follow the same generation rules and are considered to be \iid samples. 
+However, training on large architectures can be prohibitive, e.g.~in terms of GPU memory. Thus, in the training set we allow the number of channels and, hence the total number of parameters, to be stochastically defined given computational resources. For example, to train our models we upper bound the number of parameters in the training architectures to around 3M by sampling fewer channels if necessary. In the evaluation sets, the number of channels is fixed. Therefore, this pre-processing step prior to training results in some distribution shift between the training and the validation/test sets. However, the shift is not imposed by our dataset.\looseness-1
+
+\textbf{Out-of-distribution (\ood) architectures.}
+We generate five \ood test sets that follow different generation rules.
+In particular, we define \wide and \deep sets that are of interest due the stronger downstream performance of such nets in large-scale tasks~\citep{golubeva2020wider,zagoruyko2016wide,brown2020language}. These nets are often more challenging to train for fundamental~\citep{nguyen2017loss,srivastava2015training} or computational~\citep{hooker2020hardware} reasons, so predicting their parameters might ease their subsequent optimization.
+We also define the \dense set, since networks with many operations per cell and complex connectivity are underexplored in the literature despite their potential~\citep{huang2017densely}.
+Next, we define the \bnfree set that is of interest due to BN's potential negative side-effects~\citep{galloway2019batch,hendrycks2019benchmarking} and the difficulty or unnecessity of using it in some cases~\citep{wu2018group,qiao2019micro,zhang2019fixup,brock2021characterizing,brock2021high}. 
+We finally add the \textsc{ResNet/ViT} set with two predefined image classification architectures: commonly-used ResNet-50~\citep{he2016deep} and a smaller 12-layer version of the Visual Transformer (ViT)~\citep{dosovitskiy2020image} that has recently received a lot of attention in the vision community.
+%Please see \S~\ref{apdx:darts_bg} and \S~\ref{apdx:stats} for further details and statistics of our \dataset dataset.
+	
+%\vspace{-5pt}
+\section{Improved graph hypernetworks: \ghnours\label{sec:ghn_model}}
+%\vspace{-5pt}
+
+In this section, we introduce our three key improvements to the baseline \ghnbase~described in \S~\ref{sec:bg_ghn} (\fig{\ref{fig:ghn_overview}}).
+These components are essential to predict stronger parameters on our task. For the empirical validation of the effectiveness of these components see ablation studies in \S~\ref{sec:our_task}.\looseness-1
+%and \S~\ref{apdx:ablations}.
+
+%\vspace{-3pt}
+\subsection{Differentiable normalization of predicted parameters\label{sec:renorm}}
+%\vspace{-5pt}
+
+
+When training the parameters of a given network from scratch using iterative optimization methods, the initialization of parameters is crucial. A common approach is to use He~\citep{he2015delving} or Glorot~\citep{glorot2010understanding} initialization to stabilize the variance of activations across layers of the network.
+\citet{chang2019principled} showed that when the \params of the network are instead predicted by a hypernetwork, the activations in the network tend to explode or vanish.
+To address the issue of unstable network activations especially for the case of predicting \params of diverse architectures, we apply \emph{operation-dependent normalizations} (Table~\ref{tab:norm}).
+We normalize convolutional and fully-connected weights by following the \emph{fan-in} scheme of~\citep{he2015delving}:
+%(see the comparison to \emph{fan-out} in \S~\ref{apdx:ablations})
+$\hat{\w}_{p}^{v}\sqrt{{\beta}/{(C_{in}\mathcal{HW})}}$, where $C_{in},\mathcal{H,W}$ are the number of input channels and spatial dimensions of weights $\hat{\w}_{p}^{v}$, respectively; and $\beta$ is a nonlinearity specific constant following the analysis in~\citep{he2015delving}.
+The parameters of normalization layers such as BN and LN, as well as biases typically initialized with constants, are normalized by applying a squashing function with temperature $T$ to imitate the empirical distributions of models trained with SGD (see Table~\ref{tab:norm}).	
+These are differentiable normalizations, so that they are applied at training (and testing) time.
+%Further analysis of our normalization and its stabilizing effect on activations is presented in \S~\ref{apdx:renorm}.\looseness-1
+
+\begin{table}[htbp]%{r}{6cm}
+	\centering
+	%\vspace{-5pt}
+	\footnotesize
+	\caption{\small Parameter normalizations.}%\looseness-1}
+	\vspace{-5pt}
+	%\setlength{\tabcolsep}{8pt}
+	\label{tab:norm}
+	\begin{tabular}{l|l}
+		\toprule
+		Type of node $v$ & Normalization\Tstrut\Bstrut\\
+		\midrule 
+		Convolutional/fully-connected &  \(\displaystyle \hat{\w}_{p}^{v}\sqrt{{\beta}/{(C_{in}\mathcal{HW})}}  \)\Tstrut\\
+		Normalization weights & \(\displaystyle 2 \times
+		\text{sigmoid}(\hat{\w}_{p}^{v}/T) \) \\
+		Biases & \(\displaystyle \text{ tanh}(\hat{\w}_{p}^{v} / T) \) \\
+		\bottomrule
+	\end{tabular}
+	%\vspace{-3pt}
+\end{table}
+
+%\vspace{-3pt}
+\subsection{Enhancing long-range message propagation\label{sec:sp_edges}}
+%\vspace{-5pt}
+
+Computational graphs often take the form of long chains (Table~\ref{tab:graphs}) with only a few incoming/outcoming edges per node. This structure might hinder long-range propagation of information between nodes~\citep{alon2020bottleneck}.	
+Different approaches to alleviate the long-range propagation problem exist~\citep{el1996hierarchical,liu2020non,pei2020geom}, including stacking GHNs in~\citep{zhang2018graph}.
+Instead we adopt simple graph-based heuristics in line with recent works~\citep{you2019position,yang2021spagan}. In particular, we add \emph{virtual edges} between two nodes $v$ and $u$ and weight them based on the shortest path $s_{vu}$ between them (\fig{\ref{fig:long_range}}). To avoid interference with the \emph{real} edges in the computational graph, we introduce a separate MLP\textsubscript{sp} to transform the features of the nodes connected through these virtual edges, and redefine the message passing of \eqref{eq:ghn_prop} as:\looseness-1
+%
+%\setlength{\belowdisplayskip}{1pt}
+%\setlength{\abovedisplayskip}{1pt}
+\begin{equation}
+\label{eq:ghn_sp}
+\mathbf{m}_v^t = \sum\nolimits_{u \in \neigh_v^{\pi}} \text{MLP}(\mathbf{h}_u^t) + \sum\nolimits_{u \in \neigh_{v}^{(\text{sp})}} \frac{1}{s_{vu}} \text{MLP}_{\text{sp}}(\mathbf{h}_u^t),
+\end{equation}
+%
+\noindent where $\neigh_{v}^{(sp)}$ are neighbors satisfying $1 < s_{vu} \leq s^{(\max)}$, and $s^{(\max)}$ is a hyperparameter.
+To maintain the same number of trainable parameters as in \ghnbase, we decrease MLPs' sizes appropriately.\looseness-1 
+%Despite its simplicity, this approach is effective (see the comparison to stacking GHNs in \S~\ref{apdx:ablations}).
+
+\begin{figure}[htbp]
+\centering
+%\vspace{-25pt}
+%\small
+\includegraphics[width=0.25\textwidth,align=c,trim={2.8cm 3cm 2.7cm 3cm}, clip]{dag_resnet_3_sp.png} 
+\vspace{-5pt}
+\caption{\small Virtual edges (in green) allow for better capture of global context.}\label{fig:long_range}
+%\vspace{-25pt}
+\end{figure}
+
+%\vspace{-2pt}
+\subsection{Meta-batching architectures during training\label{sec:meta_batch}}
+%\vspace{-3pt}
+
+\ghnbase~updates its parameters $\theta$ based on a single architecture sampled for each batch of images \eqref{eq:solution}.
+In vanilla SGD training, larger batches of images often speed up convergence by reducing gradient noise and improve model's performance~\citep{radiuk2017impact}. Therefore, we define a meta-batch $b_m$ as the number of architectures sampled per batch of images. Both the parameter prediction and the forward/backward passes through the architectures in a meta-batch can be done in parallel. We then average the gradients across $b_m$ to update the parameters $\theta$ of $H_\domain$: $\nabla_\theta \loss = 1/{b_m} \sum_{i=1}^{b_m} \nabla_\theta \loss_i$. 
+%Further analysis of the meta-batching effect on the training loss and convergence speed is presented in \S~\ref{apdx:meta}.\looseness-1	
+
+%\vspace{-3pt}
+\section{Experiments\label{sec:ghn_exper}}
+%\vspace{-5pt}
+
+We focus the evaluation of \ghnours~on our parameter prediction task (\S~\ref{sec:our_task}). In addition, we show beneficial side-effects of i) learning a stronger neural architecture representation using \ghnours in analyzing networks (\S~\ref{sec:prop_pred}) and ii) predicting parameters for fine-tuning (\S~\ref{sec:finetune}). 
+%We provide further experimental and implementation details, as well as more results supporting our arguments in \S~\ref{apdx:exper}. 
+
+\textbf{Datasets.} We use the \dataset dataset of architectures (\S~\ref{sec:dataset}) as well as two image classification datasets  $\domain_1$ (CIFAR-10~\citep{krizhevsky2009learning}) and $\domain_2$ (ImageNet~\citep{russakovsky2015imagenet}). CIFAR-10 consists of 50k training and 10k test images of size 32$\PLH$32$\PLH$3 and 10 object categories.
+ImageNet is a larger scale dataset with 1.28M training and 50k test images of variable size and 1000 fine-grained object categories. We resize ImageNet images to 224$\PLH$224$\PLH$3 following~\citep{liu2018darts,zhang2018graph}. We use 5k/50k training images as a validation set in CIFAR-10/ImageNet and 500 validation architectures of \dataset for hyperparameter tuning.\looseness-1
+
+\textbf{Baselines.} Our baselines include \ghnbase and a simple MLP that only has access to operations, but not to the connections between them.
+This MLP baseline is obtained by replacing the GatedGNN with an MLP in our \ghnours.
+Since GHNs were originally introduced for small architectures of $\sim50$ nodes and only trained on CIFAR-10, we reimplement\footnote{While source code for GHNs~\citep{zhang2018graph} is unavailable, we appreciate the authors' help in implementing some steps.\looseness=-1} them and scale them up by introducing minor modifications to their decoder that enable their training on ImageNet and on larger architectures of up to 1000 nodes.
+%(see \S~\ref{apdx:ghn_1} for details). 
+We use the same hyperparameters to train the baselines and \ghnours.\looseness-1
+
+\textbf{Iterative optimizers.}
+In the parameter prediction experiments, we also compare our model to standard optimization methods: SGD and Adam~\citep{kingma2014adam}.
+We use off-the-shelf hyperparameters common in the literature~\citep{zhang2018graph,liu2018darts,chen2019progressive,yang2020cars,he2020milenas,li2020sgas}. On CIFAR-10, we train evaluation architectures with SGD/Adam, initial learning rate $\eta=0.025$ / $\eta=0.001$, batch size $b=96$ and up to 50 epochs. With Adam, we train only 300 evaluation architectures as a rough estimation of an average performance.
+On ImageNet, we train them with SGD, $\eta=0.1$ and $b=128$,
+and, for computational reasons (given 1402 evaluation architectures in total), we limit training with SGD to 1 epoch.
+We have also considered meta-optimizers, such as~\citep{andrychowicz2016learning,ravi2016optimization}. However, we were unable to scale them to diverse and large architectures of our \dataset, since their LSTM requires a separate hidden state for every trainable parameter in the architecture. The scalable variants exist~\citep{wichrowska2017learned,metz2020tasks}, but are hard to reproduce without open source code.\looseness-1
+
+\textbf{Additional experimental details.}
+We follow~\citep{zhang2018graph} and train GHNs with Adam, $\eta=0.001$ and batch size of 64 images for CIFAR-10 and 256 for ImageNet. We train for up to 300 epochs, except for one experiment in the ablation studies,
+where we train one GHN with $b_m = 1$ eight times longer, i.e. for 2400 epochs.
+All GHNs in our experiments use $T=1$ propagation \eqref{eq:ghn_prop}, as we found the original $T=5$ of~\citep{zhang2018graph} to be inefficient and it did not improve the accuracies in our task.
+\ghnours~uses $s^{(\max)}=50$ and $b_m=8$ and additionally uses LN that slightly further improves results.
+%(see these ablations in \S~\ref{apdx:ablations}). 
+Model selection is performed on the validation sets, but the results in our paper are reported on the test sets to enable their direct comparison.\looseness-1
+
+%\vspace{-2pt}
+\subsection{Parameter prediction\label{sec:our_task}}
+%\vspace{-2pt}
+
+
+\textbf{Experimental setup.} We trained our \ghnours and baselines on the training architectures and training images, i.e.~a separate model is trained for CIFAR-10 and ImageNet. According to our \dataset benchmark, we assess whether these models can generalize to unseen in-distribution (ID) and out-of-distribution (OOD) test architectures from our \dataset. We measure this generalization by predicting \params for the test architectures and computing their classification accuracies on the test images of CIFAR-10 (Table~\ref{tab:bench_c10}) and ImageNet (Table~\ref{tab:bench_imagenet}). The evaluation architectures with batch norm (BN) have running statistics, which are not learned by gradient descent~\citep{ioffe2015batch}, and hence are not predicted by our GHNs. To alleviate that, we follow~\citep{zhang2018graph} and evaluate the networks with BN by computing per batch statistics with batch size of 64 images.%This is further discussed in \S~\ref{apdx:details}.\looseness-1
+
+
+\begin{table}[b!]
+	\centering
+	%\vspace{-10pt}
+	\caption{\small CIFAR-10 results of predicted parameters for unseen ID and OOD architectures of \dataset. Mean (\sem{}standard error of the mean) accuracies are reported (random chance $\approx$10\%). $^\dagger$The number of parameter updates.\looseness-1}
+	\label{tab:bench_c10}
+	\vspace{-5pt}
+	\footnotesize
+	\centering
+	\setlength{\tabcolsep}{3.5pt}
+	\begin{tabular}{llp{0.1cm}llp{0.5cm}llllc}
+		\toprule
+		
+		\textbf{\textsc{Method}} & \textbf{\#upd}$^\dagger$ & &
+		\multicolumn{2}{c}{\textbf{\textsc{\iid-test}}} &
+		& 
+		\multicolumn{5}{c}{\textbf{\textsc{OOD-test}}} \\
+		
+		& & & \multicolumn{1}{c}{avg} & max & & \wide & \deep & \dense & \bnfree & \scriptsize \textsc{ResNet/ViT} \\ 
+		\cline{1-2}\cline{4-5}\cline{7-11}
+		
+		MLP & 1 & & 42.2\sem{0.6} & 60.2 & & 22.3\sem{0.9} & 37.9\sem{1.2} & 44.8\sem{1.1} & 23.9\sem{0.7} & 17.7/10.0 \Tstrut \\
+		
+		\ghnbase & 1 & & 51.4\sem{0.4} & 59.9 &  & 43.1\sem{1.7} & 48.3\sem{0.8} & 51.8\sem{0.9} & 13.7\sem{0.3} & 19.2/\textbf{18.2} \\
+		
+		\ghnours & 1 & & \textbf{66.9}\sem{0.3} & \textbf{77.1} & & \textbf{64.0}\sem{1.1} & \textbf{60.5}\sem{1.2} & \textbf{65.8}\sem{0.7} & \textbf{36.8}\sem{1.5} & \textbf{58.6}/11.4 \\
+		
+		\hline\hline
+		
+		\multicolumn{10}{l}{\textbf{Iterative optimizers (all architectures are \iid in this case)}} \Tstrut \\
+		
+		SGD (1 epoch) & \scriptsize $0.5 \PLH 10^3$ & & 46.1\sem{0.4} & 66.5 & & 47.2\sem{1.1} & 34.2\sem{1.1} & 45.3\sem{0.7} & 18.0\sem{1.1} & 61.8/34.5 \\
+		
+		SGD (5 epochs) & \scriptsize $2.5\PLH 10^3$ & & 69.2\sem{0.4} & 82.4 & & 71.2\sem{0.3} & 56.7\sem{1.6} & 67.8\sem{0.9} & 29.0\sem{2.0} & 78.2/52.5\\
+
+		SGD (50 epochs) & \scriptsize $25\PLH 10^3$ & & 88.5\sem{0.3} & 93.1 & & 88.9\sem{1.2} & 84.5\sem{1.2} & 87.3\sem{0.8} & 45.6\sem{3.6} & 93.5/75.7 \\
+		
+		Adam (50 epochs) & \scriptsize $25\PLH 10^3$ & & 84.0\sem{0.8} & 89.5 & & 82.0\sem{1.6} & 76.2\sem{2.6} & 84.8\sem{0.4} & 38.8\sem{4.8} & 91.5/79.4 \\
+		
+		\bottomrule
+	\end{tabular}
+	%\vspace{-5pt}
+\end{table}
+
+\begin{table}[b!]
+	\centering
+	%\vspace{-5pt}
+	\caption{\small ImageNet results on \dataset.
+		Mean (\sem{}standard error of the mean) top-5 accuracies are reported (random chance $\approx$0.5\%).
+		$^*$Estimated on ResNet-50 with batch size 128.
+	}
+	\label{tab:bench_imagenet}
+	\vspace{-5pt}
+	\footnotesize
+	\centering
+	\setlength{\tabcolsep}{1.0pt}
+	\begin{tabular}{llccllp{0.1cm}llllc}
+		\toprule
+		
+		\textbf{\textsc{Method}} & \textbf{\#upd} & \scriptsize \textbf{GPU sec.} & \scriptsize \textbf{CPU sec.} & \multicolumn{2}{c}{\textbf{\textsc{\iid-test}}} &
+		& 
+		\multicolumn{5}{c}{\textbf{\textsc{OOD-test}}} \\
+		
+		& & \multicolumn{1}{c}{avg} & \multicolumn{1}{c}{avg} & \multicolumn{1}{c}{avg} & max & & \wide & \deep & \dense & \bnfree & \scriptsize \textsc{ResNet/ViT} \\
+		\cline{1-4}\cline{5-6}\cline{8-12}
+		
+		\ghnbase & \scriptsize 1 & \scriptsize 0.3 & \scriptsize 0.5 & 17.2\sem{0.4} & 32.1 &  & 15.8\sem{0.9} & 15.9\sem{0.8} & 15.1\sem{0.7} & 0.5\sem{0.0} & \textbf{6.9}/0.9 \Tstrut\\ 
+		
+		\ghnours & \scriptsize 1 & \scriptsize 0.3 & \scriptsize 0.7 & \textbf{27.2}\sem{0.6} & \textbf{48.3} & & \textbf{19.4}\sem{1.4} & \textbf{24.7}\sem{1.4} & \textbf{26.4}\sem{1.2} & \textbf{7.2}\sem{0.6} & 5.3/\textbf{4.4} \Bstrut\\
+		
+		\hline\hline
+		
+		\multicolumn{10}{l}{\textbf{Iterative optimizers (all architectures are \iid in this case)}} \Tstrut \\
+		
+		SGD (1 step) & \scriptsize 1 & \scriptsize 0.4 & \scriptsize 6.0 & 0.5\sem{0.0} & 0.7 & & 0.5\sem{0.0} & 0.5\sem{0.0} & 0.5\sem{0.0} & 0.5\sem{0.0} & 0.5/0.5\\ 
+		SGD (5000 steps) & \scriptsize $5$k & \scriptsize $2\PLH 10^{3}$ & \scriptsize $3\PLH 10^{4}$ & 25.6\sem{0.3} & 50.7 & & 26.2\std{1.4} & 13.2\sem{1.1} & 25.4\sem{1.1} & 4.8\sem{0.8} & 34.8/24.3 \\
+		SGD (10000 steps) & \scriptsize $10$k & \scriptsize $4\PLH 10^{3}$ & \scriptsize $6\PLH 10^{4}$ & 37.7\sem{0.6} & 62.0 & & 38.7\sem{1.6} & 22.1\sem{1.4} & 36.3\sem{1.2} & 8.0\sem{1.2} & 49.0/33.4 \\
+		SGD (100 epochs) & \scriptsize $1000$k & \scriptsize $6\PLH 10^{5*}$ & \scriptsize $6\PLH 10^{7*}$ & $-$ &  & & $-$ & $-$ & $-$ & $-$ & 92.9/72.2 \\
+		
+		\bottomrule
+	\end{tabular}
+	%\vspace{-2pt}
+\end{table}
+
+\textbf{Results.}
+Despite \ghnours never observed the test architectures, \ghnours predicts good parameters for them making the test networks perform surprisingly well on both image datasets (Tables~\ref{tab:bench_c10} and~\ref{tab:bench_imagenet}). Our results are especially strong on CIFAR-10, where some architectures with predicted parameters achieve up to 77.1\%, while the best accuracy of training with SGD for 50 epochs is around 15\% more. We even show good results on ImageNet, where for some architectures we achieve a top-5 accuracy of up to 48.3\%. While these results are low for direct downstream applications, they are remarkable for three main reasons. First, to train GHNs by optimizing \eqref{eq:solution}, we do not rely on the prohibitively expensive procedure of training the architectures $\nets$ by SGD. Second, GHNs rely on a single forward pass to predict all parameters. Third, these results are obtained for unseen architectures, including the OOD ones. Even in the case of severe distribution shifts (e.g.~ResNet-50\footnote{Large architectures with bottleneck layers such as ResNet-50 do not appear during training.}) and underrepresented networks (e.g. ViT\footnote{Architectures such as ViT do not include BN and, except for the first layer, convolutions -- the two most frequent operations in the training set.}), our model still predicts \params that perform better than random ones. On CIFAR-10, generalization of \ghnours is particularly strong with a 58.6\% accuracy on ResNet-50.	
+
+
+On both image datasets, our \ghnours significantly outperforms \ghnbase on all test subsets of \dataset with more than a 20\% absolute gain in certain cases, e.g.~36.8\% vs 13.7\% on the \bnfree networks (Table~\ref{tab:bench_c10}). Exploiting the structure of computational graphs is a critical property of GHNs with the accuracy dropping from 66.9\% to 42.2\% on \iid (and even more on \ood) architectures when we replace the GatedGNN of \ghnours~with an MLP.
+Compared to iterative optimization methods, \ghnours predicts parameters achieving an accuracy similar to $\sim$2500 and $\sim$5000 iterations of SGD on CIFAR-10 and ImageNet respectively.
+In contrast, \ghnbase performs similarly to only $\sim$500 and $\sim$2000 (not shown in Table~\ref{tab:bench_imagenet}) iterations respectively. 
+Comparing SGD to Adam, the latter performs worse in general except for the ViT architectures similar to~\citep{zhang2019adam,dosovitskiy2020image}.\looseness-1
+
+
+\begin{figure}
+	\centering
+	%\vspace{10pt}
+	{\includegraphics[width=0.7\textwidth,trim={0.5cm 0.5cm 5.5cm 0.5cm},clip,align=c]{acc_vs_archs_b64.pdf}}
+	\vspace{-5pt}
+	\caption{\small \hspace{5pt}\ghnours~with meta batch $b_m = 8$ versus $b_m = 1$ for different numbers of training architectures on CIFAR-10.}
+	\label{fig:acc_arch}
+\end{figure}
+
+\begin{table}%[]
+\caption{\small Ablating \ghnours on CIFAR-10. An average rank of the model is computed across all \iid and \ood test architectures.}
+\label{tab:ablations}
+\vspace{-3pt}
+\centering
+\footnotesize
+\setlength{\tabcolsep}{5pt}
+\begin{tabular}{lcc|c}
+	\toprule
+	\textbf{\textsc{Model}} & \multicolumn{1}{c}{\textbf{\textsc{\iid-test}}} & \multicolumn{1}{c|}{\textbf{\textsc{OOD-test}}} & \textbf{\textsc{Avg. rank}}\Tstrut\Bstrut\\ 
+	\midrule
+	
+	\ghnours & \textbf{66.9}\sem{0.3} & \textbf{56.8}\sem{0.8} & \textbf{1.9}\Tstrut\Bstrut\\
+	\hline 
+	
+	1000 training architectures & 65.1\sem{0.5} & 52.5\sem{1.0} & 2.6\Tstrut\\
+	
+	No normalization (\S~\ref{sec:renorm}) & 62.6\sem{0.6} & 47.1\sem{1.2} & 3.9\\
+	
+	No virtual edges (\S~\ref{sec:sp_edges}) & 61.5\sem{0.4} & 53.9\sem{0.6} & 4.1\\
+	
+	No meta-batch ($b_m=1$, \S~\ref{sec:meta_batch}) & 54.3\sem{0.3} & 47.5\sem{0.6} & 5.5 \\
+	
+	$b_m=1$, train 8$\PLH$ longer & 62.4\sem{0.5} & 51.9\sem{1.0} & 3.7\\
+	
+	No GatedGNN (MLP) & 42.2\sem{0.6} & 32.2\sem{0.7} & 7.4 \\
+	
+	\hline
+	
+	\ghnbase & 51.4\sem{0.4} & 39.2\sem{0.9} & 6.8\Tstrut\\
+	
+	\bottomrule
+\end{tabular}
+\end{table}
+
+
+To report speeds on ImageNet in Table~\ref{tab:bench_imagenet}, we use a dedicated machine with a single NVIDIA V100-32GB and Intel Xeon CPU E5-1620 v4@ 3.50GHz. So for SGD these numbers can be reduced by using faster computing infrastructure and more optimal hyperparameters~\citep{goyal2017accurate}.
+Using our setup, SGD requires on average $10^4 \PLH$ more time on a GPU ($10^5 \PLH$ on a CPU) to obtain \params that yield performance similar to \ghnours.
+As a concrete example, AlexNet~\citep{krizhevsky2012imagenet} requires around 50 GPU hours (on our setup) to achieve a 81.8\% top-5 accuracy, while on some architectures we achieve $\geq$48.0\% in just 0.3 GPU seconds.\looseness-1
+
+
+
+Ablations (Table~\ref{tab:ablations}) show that all three components proposed in \S~\ref{sec:ghn_model} are important. Normalization is particularly important for OOD generalization with the largest drops on the \wide and \bnfree networks. %(see \S~\ref{apdx:ablations}). 
+Using meta-batching ($b_m = 8$) is also essential and helps stabilize training and accelerate convergence. %(see \S~\ref{apdx:ghn_2}).
+We also confirm that the performance gap between $b_m = 1$ and $b_m = 8$ is not primarily due to the observation of more architectures, since the ablated \ghnours with $b_m = 1$ trained eight times longer is still inferior.
+The gap between $b_m = 8$ and $b_m = 1$ becomes pronounced with \emph{at least} 1k training architectures (\fig{\ref{fig:acc_arch}}).
+When training with fewer architectures (e.g.~100), the GHN with meta-batching starts to overfit to the training architectures.
+Given our challenging setup with unseen evaluation architectures, it is surprising that using 1k training architectures already gives strong results. However, OOD generalization degrades in this case compared to using all 1M architectures, especially on the \bnfree networks. %(see \S~\ref{apdx:ghn_2}).
+When training GHNs on just a few architectures, the training accuracy soars to the level of training them with SGD. With more architectures, it generally decreases indicating classic overfitting and underfitting cases.\looseness-1
+
+
+%\vspace{-2pt}
+\subsection{Property prediction\label{sec:prop_pred}}
+%\vspace{-3pt}
+
+Representing computational graphs of neural architectures is a challenging problem~\citep{li2020neural,wen2019neural,jin2019auto,kriege2020survey,makarov2021survey}.
+We verify if GHNs are capable of doing that out-of-the-box in the property prediction experiments. %We also experiment with architecture comparison in \S~\ref{apdx:graph_compare}. 
+Our hypothesis is that by better solving our parameter prediction task, GHNs should also better solve graph representation tasks.
+
+\textbf{Experimental setup.}
+We predict the properties of architectures given their graph embeddings obtained by averaging node features\footnote{A fixed size graph embedding for the architecture $\f$ can be computed by averaging the output node features: $\mathbf{h}_{a}=\frac{1}{|V|} \sum_{v \in V} \mathbf{h}_v^T$, where $\mathbf{h}_a \in \mathbb{R}^d$ and $d$ is the dimensionality of node features.
+}.
+We consider four such properties: %(see \S~\ref{apdx:prop} for details):
+%\vspace{-5pt}
+\begin{itemize}%[leftmargin=5mm]
+	\setlength\itemsep{0em}
+	\item Accuracy on the ``clean'' (original) validation set of images;
+	\item Accuracy on a corrupted set (obtained by adding the Gaussian noise to images following~\citep{hendrycks2019benchmarking});
+	\item Inference speed (latency or GPU seconds per a batch of images);\looseness-1
+	\item Convergence speed (the number of SGD iterations to achieve a certain training accuracy).\looseness-1
+\end{itemize}
+\vspace{-3pt}
+
+Estimating these properties accurately can have direct practical benefits. Clean and corrupted accuracies can be used to search for the best performing architectures (e.g. for the NAS task); inference speed can be used to choose the fastest network, so by estimating these properties we can trade-off accurate, robust and fast networks~\citep{cai2019onceforall}. Convergence speed can be used to find networks that are easier to optimize.
+These properties correlate poorly with each other and between CIFAR-10 and ImageNet, 
+%(\S~\ref{apdx:prop}), 
+so they require the model to capture different regularities of graphs. 
+While specialized methods to estimate some of these properties exist, often as a NAS task~\citep{wen2020neural,lukasik2020neural,baker2017accelerating,liu2018progressive,li2020neural}, our GHNs provide a generic representation that can be easily used for many such properties.
+For each property, we train a simple regression model using graph embeddings and ground truth property values. We use 500 validation architectures of \dataset for training the regression model and tuning its hyperparameters.
+%(see \S~\ref{apdx:prop} for details).
+We then use 500 testing architectures of \dataset to measure Kendall's Tau rank correlation between the predicted and ground truth property values similar to~\citep{wen2020neural}.\looseness-1
+
+\textbf{Additional baseline.} 
+We compare to the Neural Predictor (NeuPred)~\citep{wen2020neural}. NeuPred is based on directed graph convolution and is developed for accuracy prediction achieving strong NAS results. We train a separate such NeuPred for each property from scratch following their hyperparameters. 
+
+
+\begin{figure}%{r}{7cm}
+	%\vspace{-15pt}
+	\begin{center}
+		{\includegraphics[align=c,width=0.8\textwidth]{property_prediction_hist.pdf}}
+	\end{center}		
+	\vspace{-15pt}
+	\caption{\small Property prediction of neural networks in terms of correlation (higher is better). Error bars denote the standard deviation across 5 runs.}\label{fig:properties}
+	%\vspace{-5pt}
+\end{figure}
+
+\textbf{Results.}
+\ghnours consistently outperforms the \ghnbase and MLP baselines as well as NeuPred (\fig{\ref{fig:properties}}). We also verify if higher correlations translate to downstream gains. For example, on CIFAR-10 by choosing the most accurate architecture according to the regression model and training it from scratch following~\citep{liu2018darts,zhang2018graph}, we obtained a 97.26\%(\std{0.09}) accuracy, which is competitive with leading NAS approaches, e.g.~\citep{liu2018darts,zhang2018graph,chen2019progressive,yang2020cars,he2020milenas,li2020sgas}. In contrast, the network chosen by the regression model trained on the \ghnbase~embeddings achieves 95.90\%(\std{0.08}).\looseness-1
+
+
+
+%\vspace{-3pt}
+
+%\vspace{-2pt}
+\subsection{Fine-tuning predicted parameters\label{sec:finetune}}
+%\vspace{-2pt}
+
+Neural networks trained on ImageNet and other large datasets have proven useful in diverse visual tasks in the transfer learning setup~\citep{kornblith2019better,huh2016makes,neyshabur2020being,raghu2019transfusion,zhai2019large,dosovitskiy2020image}. 
+Therefore, we explore how predicting parameters on ImageNet with GHNs compares to pretraining them on ImageNet with SGD in such a setup. 
+We consider low-data tasks as they often benefit more from transfer learning~\citep{raghu2019transfusion,zhai2019large}.
+
+\textbf{Experimental setup.}
+We perform two transfer-learning experiments. The first experiment is fine-tuning the predicted parameters on 1,000 training samples (100 labels per class) of CIFAR-10. 
+We fine-tune ResNet-50, Visual Transformer (ViT) and a 14-cell architecture based on the DARTS best cell~\citep{liu2018darts}. The hyperparameters of fine-tuning (initial learning rate and weight decay) are tuned on 200 validation samples held-out of the 1,000 training samples. The number of epochs is fixed to 50 as in \S~\ref{sec:our_task} for simplicity.
+In the second experiment, we fine-tune the predicted parameters on the object detection task. We closely follow the experimental protocol and hyperparameters from~\citep{pytorchdetection} and train the networks on the Penn-Fudan dataset~\citep{wang2007object}. The dataset contains only 170 images and the task is to detect pedestrians. Therefore this task is also well suited for transfer learning. Following \citep{pytorchdetection}, we replace the backbone of a Faster R-CNN with one of the three architectures.
+To perform transfer learning with GHNs, in both experiments we predict the parameters of a given architecture using GHNs trained on ImageNet. 
+We then replace the ImageNet classification layer with the target task-specific layers and fine-tune the entire network on the target task.
+We compare the results of GHNs to He's initialization~\citep{he2015delving} and the initialization based on pretraining the parameters on ImageNet with SGD.\looseness-1
+
+
+\begin{table}[htbp]
+	%\vspace{-5pt}
+	\centering
+	\tiny
+	\caption{\small CIFAR-10 test set accuracies and Penn-Fudan object detection average precision (at IoU=0.50) after fine-tuning the networks using SGD initialized with different methods. Average results and standard deviations for 3 runs with different random seeds are shown. For each architecture, similar GHN-2-based and ImageNet-based results are bolded.\textsuperscript{*}Estimated on ResNet-50.}
+	\label{tab:finetune}
+	\vspace{-3pt}
+	\setlength{\tabcolsep}{4pt}
+	\begin{tabular}{lcccc|ccc}
+		\toprule
+		
+		\multirow{2}{*}{\textbf{\textsc{\parbox{2cm}{Initialization Method}}}} & \multirow{2}{*}{\textbf{{\parbox{0.9cm}{GPU sec. to init.\textsuperscript{*}}}}} & \multicolumn{3}{c|}{\textbf{\textsc{100-Shot Cifar-10}}} &
+		\multicolumn{3}{c}{\textbf{\textsc{Penn-Fudan Object Detection}}}\Tstrut\Bstrut\\
+		
+		\cline{3-5}\cline{6-8}
+		
+		& & {\textsc{ResNet-50}} & {\textsc{ViT}} & {\textsc{Darts}} & {\textsc{ResNet-50}} & {\textsc{ViT}} & {\textsc{Darts}}\Tstrut\Bstrut\\
+		
+		\midrule
+		
+		He's \citep{he2015delving} & 0.003 & 41.0\sem{0.4} & 33.2\sem{0.3} &	45.4\sem{0.4} & 0.197\sem{0.042} & 0.144\sem{0.010} &	0.486\sem{0.035}\Tstrut\\
+		
+		GHN-1 (trained on ImageNet) & 0.6 &	46.6\sem{0.0} &	23.3\sem{0.1} & 49.2\sem{0.1} & 0.433\sem{0.013} &	0.0\sem{0.0} & 0.468\sem{0.024} \\
+		
+		GHN-2 (trained on ImageNet) & 0.7 & \textbf{56.4}\sem{0.1} & \textbf{41.4}\sem{0.6} & \textbf{60.7}\sem{0.3} & \textbf{0.560}\sem{0.019} & \textbf{0.436}\sem{0.032} &	\textbf{0.785}\sem{0.032} \\
+		
+		\midrule
+		
+		ImageNet (1k pretraining steps) & $6\PLH 10^{2}$ & 45.4\sem{0.3} &	\textbf{44.3}\sem{0.1} & \textbf{62.4}\sem{0.3} & 0.302\sem{0.022} & 0.182\sem{0.046} &	\textbf{0.814}\sem{0.033}\Tstrut\\
+		
+		ImageNet (2.5k pretraining steps) & $1.5\PLH 10^{3}$ &	\textbf{55.4}\sem{0.2} &	50.4\sem{0.3} &	70.4\sem{0.2} & \textbf{0.571}\sem{0.056} &	0.322\sem{0.073} &	0.823\sem{0.022}\\
+		
+		ImageNet (5 pretraining epochs) & $3\PLH 10^{4}$ & 84.6\sem{0.2} & 70.2\sem{0.5} &	83.9\sem{0.1} & 0.723\sem{0.045} &	{0.391}\sem{0.024} &	0.827\sem{0.053} \\
+		
+		ImageNet (final epoch) & $6\PLH 10^{5}$ &	89.2\sem{0.2} &	74.5\sem{0.2} &	85.6\sem{0.2} & 0.876\sem{0.011} &	\textbf{0.468}\sem{0.023} &	0.881\sem{0.023}\\
+		
+		\bottomrule
+	\end{tabular}
+	%\vspace{-5pt}
+\end{table}
+
+\textbf{Results.} The CIFAR-10 image classification results of fine-tuning the parameters predicted by our GHN-2 are $\geq$10 percentage points better (in absolute terms) than fine-tuning the parameters predicted by GHN-1 or training the parameters initialized using He's method (Table~\ref{tab:finetune}).
+Similarly, the object detection results of GHN-2-based initialization are consistently better than both GHN-1 and He's initializations. The GHN-2 results are a factor of 1.5-3 improvement over He's for all the three architectures. Overall, the two experiments clearly demonstrate the practical value of predicting parameters using our GHN-2.
+Using GHN-1 for initialization provides relatively small gains or hurts convergence (for ViT).
+Compared to pretraining on ImageNet with SGD, initialization using GHN-2 leads to performance similar to 1k-2.5k steps of pretraining on ImageNet depending on the architecture in the case of CIFAR-10. In the case of Penn-Fudan, GHN-2's performance is similar to $\geq$1k steps of pretraining with SGD. In both experiments, pretraining on ImageNet for just 5 epochs provides strong transfer learning performance and the final ImageNet checkpoints are only slightly better, which aligns with previous works~\citep{neyshabur2020being}. 
+Therefore, further improvements in the parameter prediction models appear promising.\looseness-1
+
+
+%\vspace{-10pt}
+\section{Related work\label{sec:ghn_related}}
+%\vspace{-10pt}
+
+Our proposed parameter prediction task,  objective in \eqref{eq:solution}  and improved GHN are related to a wide range of machine learning frameworks, in particular meta-learning and neural architecture search (NAS). Meta-learning is a general framework~\citep{hospedales2020meta,schmidhubermetalearning} that includes meta-optimizers and meta-models, among others. Related NAS works include differentiable~\citep{liu2018darts} and one-shot methods~\citep{cai2019onceforall}. 
+%See additional related work in \S~\ref{apdx:related_work}.\looseness-1
+
+\textbf{Meta-optimizers.} Meta-optimizers~\citep{andrychowicz2016learning,ravi2016optimization,metz2020tasks,kirsch2020meta,gomes2021meta} define a problem similar to our task, but where $H_\domain$ is an RNN-based model predicting the gradients $\nabla \w$, mimicking the behavior of iterative optimizers. Therefore, the objective of meta-optimizers may be phrased as \emph{learning to optimize} as opposed to our \emph{learning to predict} \params.
+Such meta-optimizers can have their own hyperparameters that need to be tuned for a given architecture $\f$ and need to be run expensively (on the GPU) for many iterations following \eqref{eq:optim1b}.\looseness-1
+
+
+\textbf{Meta-models.} Meta-models include methods based on MAML~\citep{finn2017model}, ProtoNets~\citep{snell2017prototypical} and auxiliary nets predicting task-specific parameters~\citep{romero2016diet,requeima2019fast,li2019lgm,bertinetto2016learning}. These methods are tied to a particular architecture and need to be trained from scratch if it is changed.
+Several recent methods attempt to relax the choice of architecture in meta-learning. T-NAS~\citep{lian2020towards} combines MAML with DARTS~\citep{liu2018darts} to learn both the optimal architecture and its parameters for a given task. However, the best network, $\f$, needs to be trained using MAML from scratch. Meta-NAS~\citep{elsken2020meta} takes a step further and only requires fine-tuning of $\f$ on a given task. However, the $\f$ is obtained from a single meta-architecture and so its choice is limited, preventing parameter prediction for arbitrary $\f$. CATCH~\citep{chen2020catch} follows a similar idea, but uses reinforcement learning to quickly search for the best $\f$ on the specific task.
+Overall meta-learning mainly aims at generalization \textit{across tasks}, often motivated by the few-shot learning problem. In contrast, our parameter prediction problem assumes a single task (here an image dataset), but aims at generalization \textit{across architectures} $\f$ with the ability to predict parameters in a single forward pass.\looseness-1
+
+
+\textbf{One-shot NAS.} One-shot NAS aims to learn a single ``supernet''~\citep{yu2020bignas,cai2019onceforall,he2021automl} that can be used to estimate the performance of smaller nets (subnets) obtained by some kind of pruning the supernet, followed by training the best chosen $\f$ from scratch with SGD.
+Recent models, in particular BigNAS~\citep{cai2019onceforall} and OnceForAll (OFA)~\citep{yu2020bignas}, eliminate the need to train subnets. However, the fundamental limitation of one-shot NAS is poor scaling with the number of possible computational operations~\citep{zhang2018graph}. This limits the diversity of architectures for which \params can be obtained. For example, all subnets in OFA are based on MobileNet-v3~\citep{howard2019searching}, which does not allow to solve our more general parameter prediction task.
+To mitigate this, SMASH~\citep{brock2017smash} proposed to predict some of the \params using hypernetworks~\citep{ha2016hypernetworks} by encoding architectures as a 3D tensor.
+Graph HyperNetworks (GHNs)~\citep{zhang2018graph} further generalized this approach to ``arbitrary'' computational graphs (DAGs), which allowed them to improve NAS results.
+GHNs focused on obtaining reliable subnetwork rankings for NAS and did not aim to predict large-scale performant parameters.
+We show that the vanilla GHNs perform poorly on
+our parameter prediction task mainly due to the inappropriate scale of predicted parameters, lack of long-range interactions in the graphs, gradient noise and slow convergence when optimizing \eqref{eq:solution}.
+Conventionally to NAS, GHNs were also trained in a quite constrained architecture space~\citep{bender2018understanding}. We expand the architecture space adopting GHNs for a more general problem.\looseness-1
+
+Our work is also loosely related to other parameter prediction methods~\citep{Denil2013-la,bertinetto2016learning,ratzlaff2019hypergan}, analysis of graph structure of neural networks~\citep{you2020graph}, knowledge distillation from multiple teachers~\citep{liu2019knowledge}, compression methods~\citep{cheng2017survey} and optimization-based initialization~\citep{dauphin2019metainit,zhu2021gradinit,das2021data}. \citet{Denil2013-la} train a model that can predict a fraction of network parameters given other parameters requiring to retrain the model for each new architecture.
+\citet{bertinetto2016learning} train a model that predicts parameters given a new few-shot task similarly to~\citep{ravi2016optimization,requeima2019fast}, and the model is also tied to a particular architecture.
+The HyperGAN~\citep{ratzlaff2019hypergan} allows to generate an ensemble of trained parameters in a computationally efficient way, but as the aforementioned works is constrained to a particular architecture.
+Finally, MetaInit~\citep{dauphin2019metainit}, GradInit~\citep{zhu2021gradinit} and Sylvester-based initialization~\citep{das2021data} can initialize arbitrary networks by carefully optimizing their initial parameters, but due to the optimization loop they are generally more computationally expensive compared to predicting parameters using GHNs.
+Overall, these prior works did not formulate the task nor proposed the methods of predicting performant \params for diverse and large-scale architectures as ours.\looseness-1
+
+Finally, the construction of our \dataset is related to the works on network design spaces. Generating arbitrary architectures using a graph generative model, e.g.~\citep{yu2019dag,guo2020systematic,you2020graph}, can be one way to create the training dataset $\nets$. Instead, we leverage and extend an existing DARTS framework~\citep{liu2018darts} specializing on neural architectures to generate $\nets$. 
+More recent works~\citep{radosavovic2020designing} or other domains~\citep{you2020design} can be considered in future work.
+
+
+%\vspace{-5pt}
+\section{Conclusion}
+%\vspace{-10pt}
+We propose a novel framework and benchmark to learn and evaluate neural parameter prediction models. Our model (\ghnours) is able to predict \params for very diverse and large-scale architectures in a single forward pass in a fraction of a second. The networks with predicted \params yield surprisingly high image classification accuracy given the extremely challenging nature of our parameter prediction task. However, the accuracy is still far from networks trained with handcrafted optimization methods. Bridging the gap is a promising future direction. As a beneficial side-effect, \ghnours learns a strong representation of neural architectures as evidenced by our property prediction evaluation. Finally, parameters predicted using \ghnours trained on ImageNet benefit transfer learning in the low-data regime. This motivates further research towards solving our task.\looseness-1

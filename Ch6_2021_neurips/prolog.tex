@@ -1,0 +1,27 @@
+%\chapter{PROLOGUE TO FOURTH ARTICLE}
+\section*{Prologue}
+\addcontentsline{toc}{section}{Prologue}
+
+% \begin{tabular}{p{0.16\linewidth}p{0.78\linewidth}}
+%      \textit{Title:} & Parameter Prediction for Unseen Deep Architectures \\
+%      \textit{Authors:} & Boris Knyazev, Michal Drozdzal, Graham Taylor, Adriana Romero \\
+%      \textit{Published at:} & \venue{Neural Information Processing Systems (NeurIPS 2021)} \\
+%     \textit{Code release:} & \url{https://github.com/facebookresearch/ppuda} \\
+%     \textit{Personal contributions:} & developed the key components of algorithms and models; developed the code; designed
+% and ran all experiments; wrote most of the article.
+% \end{tabular}
+
+\vspace{5pt}
+\densepar{Context.}
+Before deep learning it was often necessary to manually design features (\eg SIFT~\citep{lowe2004distinctive}). Now, we can simply learn features using gradient descent algorithms like SGD. However, SGD itself is manually designed and thus has its own limitations similar to manual feature engineering. In particular, SGD is computationally expensive and requires expertise to tune it. In addition, SGD does not accumulate the knowledge of previous optimizations, rather it starts from scratch. While replacing manually designed features with the learnable ones is extremely successful~\citep{krizhevsky2012imagenet}, replacing SGD appears to be more challenging. So far, learnable methods based on recurrent neural networks have been explored to tackle this task~\citep{andrychowicz2016learning}. However, these methods produce optimizers that are inefficient as SGD, motivating research into alternative approaches.
+
+
+\densepar{Contributions.}
+We build on Graph HyperNetworks (GHNs)~\citep{zhang2018graph} that take a neural network architecture and output its trained parameters in a single forward pass. To train and evaluate GHNs, we release the DeepNets-1M dataset of neural architectures for vision tasks: CIFAR-10 and ImageNet. We significantly improve on GHNs in terms of design and generalization ability. For example, we can take a common ResNet-50 neural network and predict all its parameters using our GHN-2 in less than a second even on a CPU. This ResNet-50 achieves 58.6\% on CIFAR-10 without any training, a remarkable performance since our GHN-2 has never observed models at the same scale and connectivity.
+
+%\vspace{-3pt}
+\densepar{Recent works.}
+%Predicting performant parameters of arbitrary large-scale networks is a challenging task, so little progress has been made in this direction.
+\citet{cai2019once} provide a method to obtain performant ImageNet parameters for diverse networks. However, all their networks are derived from a shared ``supernet'' based on MobileNet-v3~\citep{howard2019searching}. As a result, this method cannot be applied to arbitrary networks.
+Other works are based on meta-optimizers~\citep{ravi2016optimization,metz2020tasks,wichrowska2017learned} and, as inherent to iterative optimizers, are computationally inefficient.
+HyperTransformers can predict parameters for small-scale networks and can generalize across tasks~\citep{anonymous2021HyperTransformer}. Scaling up HyperTransformers and connecting them with GHNs may enable parameter prediction across tasks.\looseness-1
