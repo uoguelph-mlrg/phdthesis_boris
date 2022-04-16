@@ -1,0 +1,362 @@
+% **************************** Custom Packages ********************************
+\let\newfloat\undefined
+\usepackage{algorithm}
+\usepackage{algpseudocode}
+\usepackage{amsfonts}       % blackboard math symbols
+\usepackage{amsmath}
+\usepackage{amssymb}
+\usepackage{bbm}  % for \mathbbm{1}
+\usepackage{bibentry}
+\nobibliography*
+%\newcommand\bmmax{2}
+\newcommand\hmmax{0}
+\newcommand\bmmax{0}
+\usepackage{bm}  % for more powerful bold symbols https://tex.stackexchange.com/a/596
+\usepackage{booktabs}
+\usepackage{breakcites}
+\usepackage{pifont}  % for dingbats checkmark and xmark
+\usepackage{mathtools}
+\usepackage{ifthen}
+\usepackage{keyval}
+\usepackage{placeins}
+\usepackage{tabu}
+\usepackage{tikz}
+\usepackage[normalem]{ulem}
+\usepackage{upgreek}
+\usepackage{natbib}
+\usepackage{nicefrac}       % compact symbols for 1/2, etc.
+\usepackage{soul}
+\usepackage{enumitem}
+\usepackage{microtype}      % microtypography
+\usepackage{xcolor,colortbl}
+\usepackage{tikz}
+%\usepackage{subfigure}
+\usepackage{tabularx}
+\usepackage{makecell}
+\usepackage{titlesec}
+
+%for background
+%\DeclareMathOperator{\E}{\mathbb{E}}
+
+\usepackage{wrapfig,lipsum,booktabs}
+
+\usepackage{multirow}
+
+\DeclareMathOperator*{\argmax}{argmax}
+\DeclareMathOperator{\Tr}{Tr}  % GWT: Trace
+\newcommand{\cmark}{\ding{51}}%
+\newcommand{\xmark}{\ding{55}}%
+
+\usepackage{capt-of}
+\usepackage{times}
+\usepackage{epsfig}
+\usepackage[export]{adjustbox}  % for adjusting images
+\usepackage{xspace}
+\usepackage{setspace}
+\usepackage{epigraph} 
+
+%\newcommand*{\eg}{e.g.\@\xspace}
+%\newcommand*{\ie}{i.e.\@\xspace}
+%\newcommand*{\wrt}{w.r.t.\xspace}
+
+% If you comment hyperref and then uncomment it, you should delete
+% egpaper.aux before re-running latex.  (Or just hit 'q' on the first latex
+% run, let it finish, and you should be clear).
+\usepackage[pagebackref=true,breaklinks=true,colorlinks,bookmarks=false]{hyperref}
+
+\usetikzlibrary{arrows.meta, backgrounds, calc, fit, positioning}
+
+\DeclareMathOperator*{\binop}{\oplus}
+
+
+% *************************** Graphics and figures *****************************
+
+% Uncomment the following two lines to force Latex to place the figure.
+% Use [H] when including graphics. Note 'H' instead of 'h'
+%\usepackage{float}
+%\restylefloat{figure}
+
+\usepackage{caption}
+\usepackage{subcaption}
+
+% ********************************** Tables ************************************
+\usepackage{booktabs} % For professional looking tables
+% \usepackage{multirow}
+
+%\usepackage{multicol}
+%\usepackage{longtable}
+%\usepackage{tabularx}
+
+\usepackage{graphbox,graphicx}
+
+% *********************************** SI Units *********************************
+\usepackage{siunitx} % use this package module for SI units
+
+
+% ******************************* Line Spacing *********************************
+
+% Choose linespacing as appropriate. Default is one-half line spacing as per the
+% University guidelines
+
+% \DoubleSpacing
+\setuogspacing{\OnehalfSpacing}
+% \SingleSpacing
+
+
+% ************************ Formatting / Footnote *******************************
+
+% Don't break enumeration (etc.) across pages in an ugly manner (default 10000)
+%\clubpenalty=500
+%\widowpenalty=500
+
+%\usepackage[perpage]{footmisc} %Range of footnote options
+
+
+% *****************************************************************************
+% *************************** Bibliography  and References ********************
+
+%\usepackage{cleveref} %Referencing without need to explicitly state fig /table
+
+% Add `custombib' in the document class option to use this section
+
+% changes the default name `Bibliography` -> `References'
+\renewcommand{\bibname}{References}
+
+
+% ******************************** Roman Pages *********************************
+% The romanpages environment set the page numbering to lowercase roman one
+% for the contents and figures lists. It also resets
+% page-numbering for the remainder of the dissertation (arabic, starting at 1).
+
+\newenvironment{romanpages}{
+  \setcounter{page}{1}
+  \renewcommand{\thepage}{\roman{page}}}
+{\newpage\renewcommand{\thepage}{\arabic{page}}}
+
+
+% ******************************************************************************
+% ************************* User Defined Commands ******************************
+% ******************************************************************************
+
+\makeatletter                  % You do not need to write [htpb] all the time
+\renewcommand\fps@figure{htbp} %
+\renewcommand\fps@table{htbp}  %
+\makeatother                   %
+
+% *********** To change the name of Table of Contents / LOF and LOT ************
+
+%\renewcommand{\contentsname}{My Table of Contents}
+%\renewcommand{\listfigurename}{My List of Figures}
+%\renewcommand{\listtablename}{My List of Tables}
+\DeclarePairedDelimiter\ceil{\lceil}{\rceil}
+\DeclarePairedDelimiter\floor{\lfloor}{\rfloor}
+\newcommand{\matr}[1]{#1}
+\newcommand{\tens}[1]{\mathcal{#1}}
+\renewcommand{\vec}[1]{#1}
+\newcommand{\vect}[2]{\vec{#1}^{(#2)}}
+
+% Generalized hadamard product fusion
+\newcommand{\thetavec}{\ensuremath{\theta}}
+\newcommand{\fusop}{\ensuremath{\mathcal{F_{\thetavec}}}}
+\newcommand{\mutanfeat}[1]{\ensuremath{\tilde{#1}}}
+\newcommand{\m}{\ensuremath{m}}
+\newcommand{\n}{\ensuremath{n}}
+\newcommand{\q}{\ensuremath{q}}
+\renewcommand{\v}{\ensuremath{v}}
+\newcommand{\z}{\ensuremath{z}}
+%\newcommand{\A}{\ensuremath{A}}
+\newcommand{\B}{\ensuremath{B}}
+%\renewcommand{\C}{\ensuremath{C}}
+\newcommand{\R}{\ensuremath{\mathbb{R}}}
+\newcommand{\T}{\ensuremath{\mathcal{T}}}
+\newcommand{\Tfibre}{\ensuremath{\T_{i_1 \cdots i_{n - 1} \,:\, i_{n + 1} \cdots i_N}}}
+\newcommand{\TsizeIn}[1]{\ensuremath{I_1 \times \cdots \times I_{n - 1} \times #1 \times I_{n + 1} \times \cdots \times I_N}}
+\newcommand{\binopb}{\ensuremath{\sideset{}{_b}\binop}}
+\newcommand{\binopseq}{\ensuremath{{(\binopb)}_{b = 1}^B}}
+\newcommand{\binoppartition}{\ensuremath{{\{\tuckbranch\}}_b}}
+\newcommand{\binoppartB}{\ensuremath{\mathbb{B}}}
+\newcommand{\binoppartBseq}{\ensuremath{{(\binoppartB_b)}_{b = 1}^B}}
+\newcommand{\tuckbranch}{\ensuremath{\T_r^{\q{}\v{}}}}
+\newcommand{\hadamardqv}{\ensuremath{N_r\mutanfeat{q} \odot M_r\mutanfeat{v}}}
+
+% SST
+%\newcommand{\real}{\mathbb{R}}
+\newcommand{\yvosvalG}{68.1}
+\newcommand{\davisvalG}{53.2}
+\newcommand{\inputvar}{\mathcal{X}}
+\newcommand{\outputvar}{\mathcal{Y}}
+\newcommand{\vidfeat}{\mathcal{T}}
+\newcommand{\objfeat}{\mathcal{R}}
+\newcommand{\pixel}{p}
+\newcommand{\querytensor}{\mathcal{Q}}
+\newcommand{\keytensor}{\mathcal{K}}
+\newcommand{\embtensor}{\mathcal{E}}
+\newcommand{\valuetensor}{\mathcal{V}}
+\newcommand{\objmean}{\mu_o}
+\newcommand{\objcov}{\Sigma_o}
+\newcommand{\objctx}{\tilde{\mu}_o}
+\newcommand{\viddim}{\real{}^{C\times T\times H\times W}}
+\newcommand{\softmax}{\mathtt{softmax}}
+\newcommand{\yesmark}{\ding{51}}
+\newcommand{\nomark}{\ding{55}}
+\newcommand{\J}{$\mathcal{J}$}
+\newcommand{\F}{$\mathcal{F}$}
+%\renewcommand{\G}{\mathcal{G}}
+\newcommand{\JandF}{$\mathcal{J} \& \mathcal{F}$}
+
+
+
+\newcommand{\A}{\mathbf{A}}
+\newcommand{\Lapl}{\mathbf{L}}
+\newcommand{\D}{\mathbf{D}}
+\newcommand{\G}{\mathcal{G}}
+\newcommand{\V}{\mathcal{V}}
+\newcommand{\E}{\mathcal{E}}
+\newcommand{\Y}{\mathbf{Y}}
+\newcommand{\y}{\mathbf{y}}
+\newcommand{\X}{\mathbf{X}}
+\newcommand{\x}{\mathbf{x}}
+\newcommand{\Z}{\mathbf{Z}}
+\newcommand{\h}{\mathbf{h}}
+% \newcommand{\H}{\mathbf{H}}
+\newcommand{\W}{\mathbf{W}}
+\newcommand{\w}{\mathbf{w}}
+%\newcommand{\R}{\mathbb{R}}
+\newcommand{\eg}{\emph{e.g.}\@\xspace}
+\newcommand{\ie}{\emph{i.e.}\@\xspace}
+\newcommand{\wrt}{\emph{w.r.t.}\@\xspace}
+\newcommand{\IID}{\emph{i.i.d.}\@\xspace}
+\newcommand{\std}[1]{{\tiny{$\pm$#1}}}
+
+% \newcommand{\cmark}{\ding{51}}%
+% \newcommand{\xmark}{\ding{55}}%
+
+\newcommand{\cnns}{CNNs\xspace}
+\newcommand{\cnn}{CNN\xspace}
+\newcommand{\gnns}{GNNs\xspace} % $\mathcal{G}$\textit{NNs}
+\newcommand{\gnn}{GNN\xspace} % $\mathcal{G}$\textit{NN}
+
+\newcommand{\cgshort}{\textsc{CoGen}\xspace}
+\newcommand{\cg}{compositional generalization\xspace}
+\newcommand{\CG}{Compositional generalization\xspace}
+
+% NeurIPS 2019
+\newcommand{\mnistfull}{\textsc{MNIST}\xspace}
+\newcommand{\mnist}{\textsc{MNIST-75sp}\xspace}
+\newcommand{\colors}{\textsc{Colors}\xspace}
+\newcommand{\tri}{\textsc{Triangles}\xspace}
+\newcommand{\collab}{\textsc{Collab}\xspace}
+\newcommand{\proteins}{\textsc{Proteins}\xspace}
+\newcommand{\dd}{\textsc{D\&D}\xspace}
+\newcommand{\synthetic}{\colors, \tri~and \mnist\xspace}
+\newcommand{\real}{\collab, \proteins~and \dd\xspace}
+\newcommand{\wsup}{weakly-supervised\xspace}
+
+% ICCV 2021
+\newcommand{\graph}{\mathit{\cal G}}
+\newcommand{\pgraph}{\mathit{\hat{\graph}}}
+\newcommand{\structn}{\textsc{GraphN}\xspace}
+\newcommand{\oracle}{\textsc{Oracle-Zs}\xspace}
+
+\newcommand{\tmin}{t_\mathrm{min}}
+\newcommand{\abs}[1]{\left\lvert#1\right\rvert}
+\newcommand{\maxi}[1]{\overline{\mathbf{#1}}}
+\newcommand{\mini}[1]{\underline{\mathbf{#1}}}
+\newcommand{\interval}[2]{\left[\;#1\:,#2\;\right]}
+\newcommand{\sumall}{\sum_{i=0}^s}
+\newcommand{\sumj}{\sum_{\substack{i = 0\\i \neq j}}^s}
+\newcommand{\di}{\sigma^i(\maxi{\boldsymbol\lambda})}
+\newcommand{\djj}{\sigma^j(\maxi{\boldsymbol\lambda})}
+
+
+% NeurIPS 2021
+\newcommand{\mad}[1]{{\scriptsize{$\pm$#1}}}
+\newcommand{\sem}[1]{{\scriptsize{$\pm$#1}}}
+\newcommand{\topacc}[1]{{\scriptsize{/#1}}}
+\newcommand{\f}{a}
+
+\newcommand{\nets}{\mathcal{F}}
+\newcommand{\domain}{\mathcal{D}}
+\newcommand{\neigh}{\mathcal{N}}
+%\newcommand{\h}{\mathbf{h}}
+\newcommand{\loss}{{\cal L}}
+%\newcommand{\w}{\mathbf{w}}
+
+\newcommand{\params}{parameters\xspace}
+\newcommand{\net}{architecture\xspace}
+
+\newcommand{\PLH}{{\mkern-0.1mu\times\mkern-0.1mu}}
+\newcommand{\ghnbase}{\textsc{GHN-1}\xspace}
+\newcommand{\ghnours}{\textsc{GHN-2}\xspace}
+\newcommand{\dataset}{\textsc{DeepNets-1M}\xspace}
+
+
+\newcommand{\iid}{\textsc{ID}\xspace}
+\newcommand{\iidtrain}{\textsc{Train}\xspace}
+\newcommand{\iidval}{\textsc{Val}\xspace}
+\newcommand{\iidtest}{\textsc{Test}\xspace}
+\newcommand{\ood}{\textsc{OOD}\xspace}
+\newcommand{\wide}{\textsc{Wide}\xspace}
+\newcommand{\deep}{\textsc{Deep}\xspace}
+\newcommand{\dense}{\textsc{Dense}\xspace}
+\newcommand{\bnfree}{\textsc{BN-free}\xspace}
+
+\newcommand{\bp}{\mathbf{p}}
+\newcommand{\bt}{\mathbf{t}}
+\newcommand{\bv}{\mathbf{v}}
+\newcommand{\bw}{\mathbf{w}}
+\newcommand{\bx}{\mathbf{x}}
+\newcommand{\by}{\mathbf{y}}
+\newcommand{\bz}{\mathbf{z}}
+
+%\newcommand{\bm}{\mathbf{m}}
+\newcommand{\bn}{\mathbf{n}}
+\newcommand{\be}{\mathbf{e}}
+\newcommand{\bc}{\mathbf{c}}
+
+% Other stuff
+\newcommand{\best}[1]{{\bfseries#1}}
+\newcommand{\densepar}[1]{\textbf{#1}}
+\newcommand{\apdx}{\textit{Appendix}} 
+
+\definecolor{bad}{gray}{0.85}
+%\definecolor{bad}{gray}{0.95}
+\definecolor{extreme}{rgb}{0.82,0.82,0.90}
+%\definecolor{bad}{rgb}{0.9,0.9,0.9}
+\definecolor{good}{rgb}{0.85, 1.0, 0.85}
+\newcommand\crule[3][black]{\textcolor{#1}{\rule{#2}{#3}}}
+
+\newcommand\Tstrut{\rule{0pt}{3ex}}         % = `top' strut
+\newcommand\Bstrut{\rule[-1.3ex]{0pt}{0pt}}   % = `bottom'
+
+\newcommand\blfootnote[1]{%
+  \begingroup
+  \renewcommand\thefootnote{}\footnote{#1}%
+  \addtocounter{footnote}{-1}%
+  \endgroup
+}
+
+\newcommand{\venue}[1]{\ul{#1}}
+\newcommand{\fig}[1]{Fig.~{#1}}
+\newcommand{\secref}[1]{\S~{#1}}
+
+\setsecnumdepth{subsection}
+
+\renewcommand{\toprule}{\Xhline{3\arrayrulewidth} }
+\renewcommand{\midrule}{\Xhline{2\arrayrulewidth} }
+\renewcommand{\bottomrule}{\Xhline{3\arrayrulewidth} }
+
+\usepackage{stfloats}
+\fnbelowfloat % puts footnotes below the bottom floats
+\makeatletter
+\def\blfootnote{\xdef\@thefnmark{}\@footnotetext}
+\makeatother
+
+%\newcommand{\eqref}[]{}
+
+% ********************************* Appendix ***********************************
+
+% The default value of both \appendixtocname and \appendixpagename is `Appendices'. These names can all be changed via:
+
+%\renewcommand{\appendixtocname}{List of appendices}
+%\renewcommand{\appendixname}{Appndx}

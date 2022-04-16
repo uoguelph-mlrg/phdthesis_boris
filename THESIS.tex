@@ -1,0 +1,118 @@
+% the tex files from this thesis are from Brendan Duke's Masters thesis: https://github.com/dukebw/master-thesis-fusion
+
+\documentclass[oneside,12pt,oldfontcommands]{memoir}
+
+% Includes
+%\usepackage{mathptmx}  % Times New Roman
+% \usepackage[T1]{fontenc}
+%\usepackage[utf8]{inputenc}
+%\usepackage{ebgaramond} % Defines garamond font
+% \usepackage[altbullet]{lucidabr}  % Lucida bright
+\usepackage{pwuog}  % U of G thesis package
+
+%\input{Nomenclature/nomenclature}
+%\nomenclature[1]{$a$}{Vector (including scalars)}%
+%\nomenclature[2]{$A$}{Matrix or scalar constant}%
+%\nomenclature[3]{$\mathcal{A}$}{Tensor with more than two dimensions}%
+
+% ********************************** Preamble **********************************
+% Preamble: Contains packages and user-defined commands and settings
+\input{preamble}
+\usepackage{newtxtext,newtxmath}  % Times New Roman kind of font
+%\usepackage{tocloft}
+
+% ************************ Thesis Information & Meta-data **********************
+% Thesis title and author information, refernce file for biblatex
+\input{thesis-info}
+
+% ******************************** Front Matter ********************************
+% left, right margins and textwidth
+\setlrmarginsandblock{1in}{1in}{*}
+\setulmarginsandblock{1.5in}{1in}{*}
+\checkandfixthelayout 
+
+\begin{document}
+
+\maxtocdepth{subsection} % put 3 levels into the ToC
+
+\frontmatter
+
+\thetitlepage
+\setulmarginsandblock{1.2in}{1.2in}{*}
+\setheadfoot{30pt}{30pt}
+\checkandfixthelayout 
+
+% \approvalpage
+% \include{Declaration/declaration}
+
+\uogabstract
+%\section*{}
+%\uogpapers
+\uogdedication{\include{other/dedication}}
+\uogacknowledgements
+
+% *********************** Adding TOC and List of Figures ***********************
+% \renewcommand{\cftchapterfont}{\normalfont\sffamily}   
+% \renewcommand{\cftsectionfont}{\normalfont\sffamily}   
+{
+  \hypersetup{linkcolor=black}
+  \tableofcontents
+  \listoftables
+  \listoffigures
+}
+%\printnomenclature[6em]
+
+%%% if you have more prelim sections, then
+%%% \clearpage
+%%% \pagestyle{plain}
+%%% \prelimtitle{title} text % for each section before main text
+
+% ******************************** Main Matter *********************************
+\mainmatter
+\pagestyle{uog}
+
+% ABSTRACT is in other/abstract.tex
+\include{Ch1_Intro/intro}
+\include{Ch2_background/background}  % means the % means the 2019_neurips folder, file folder, file background.tex
+\include{Ch3_2019_neurips/main}
+\include{Ch4_2020_bmvc/main}
+\include{Ch5_2021_iccv/main}
+\include{Ch6_2021_neurips/main}
+\include{Conclusion/conclusion}
+
+
+% ********************************** Back Matter *******************************
+% Backmatter should be commented out, if you are using appendices after References
+%\backmatter
+
+%% if endnotes then
+% \printpagenotes
+
+% ********************************** Bibliography ******************************
+% To use the conventional natbib style referencing
+% Bibliography style previews: http://nodonn.tipido.net/bibstyle.php
+% Reference styles: http://sites.stat.psu.edu/~surajit/present/bib.htm
+
+\small
+\smallskip
+%\setstretch{1}
+\bibliographystyle{apalike}
+%\bibliographystyle{unsrt} % Use for unsorted references  
+%\bibliographystyle{plainnat} % use this to have URLs listed in References
+\cleardoublepage
+\bibliography{Ch3_2019_neurips/ref,Ch4_2020_bmvc/ref,Ch5_2021_iccv/ref,Ch6_2021_neurips/ref,ref} % Path to your References.bib file
+
+
+% ********************************** Appendices ********************************
+
+% \appendix % Using appendices environment for more functunality
+
+%\chapter{\include{Appendix1/appendix1}}
+
+% *************************************** Index ********************************
+% \printthesisindex % If index is present
+
+%% if Biographical sketch then
+% \begin{biosketch} ... \end{biosketch}
+
+\end{document}

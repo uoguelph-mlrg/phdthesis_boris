@@ -1,0 +1,19 @@
+% ************************** Thesis Abstract *****************************
+% Use `abstract' as an option in the document class to print only the titlepage and the abstract.
+
+% Must be <=350 words for PhD
+
+\noindent This thesis by articles makes several contributions to the field of machine learning, specifically, in graph reasoning tasks. Each article investigates and improves generalization in one of several graph reasoning applications: classical graph classification tasks, compositional visual reasoning, and the novel task of parameter prediction for neural network graphs.
+
+In the first article we study the attention mechanism in graph neural networks (GNNs). While attention has been widely studied in GNNs, its effect on generalization to larger and noisier graphs has not been thoroughly analyzed. 
+We show that in synthetic graph tasks, generalization can be improved by carefully initializing the attention modules of GNNs.
+We also develop a method that reduces sensitivity of attention modules to initialization and improves generalization in real graph tasks.
+
+In the second article we address the problem of generalizing to rare or unseen compositions of objects and relationships in visual scenes. 
+Previous works typically specialize on frequent visual compositions and show poor compositional generalization. To alleviate that, we found that it is important to normalize the loss function with respect to the structure of scene graphs so that the training labels are leveraged more effectively. Models trained with our loss significantly improve compositional generalization.
+
+In the third article we further address visual compositional generalization. We consider a data augmentation approach of adding rare and unseen compositions to the training data. We develop a model based on generative adversarial networks that generate synthetic visual features conditioned on rare or unseen scene graphs that we obtain by perturbing real scene graphs. Our approach consistently improves compositional generalization.
+
+In the fourth article we study graph reasoning in the novel task of predicting parameters for unseen deep neural architectures. Our task is motivated by the limitations of iterative optimization algorithms used to train neural networks.
+To solve our task, we develop a model based on Graph HyperNetworks and train it on our dataset of neural architecture graphs. Our model can predict performant parameters for unseen deep networks, such as ResNet-50, in a single forward pass.
+Our model is useful for neural architecture search and transfer learning.
