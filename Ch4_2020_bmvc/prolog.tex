@@ -1,0 +1,22 @@
+%\chapter{PROLOGUE TO SECOND ARTICLE}
+\section*{Prologue}
+\addcontentsline{toc}{section}{Prologue}
+
+% \begin{tabular}{p{0.16\linewidth}p{0.78\linewidth}}
+%      \textit{Title:} & Graph Density-Aware Losses for Novel Compositions in Scene Graph Generation \\
+%      \textit{Authors:} & Boris Knyazev, Harm de Vries, Cătălina Cangea, Graham Taylor, Aaron Courville, Eugene Belilovsky \\
+%      \textit{Published at:} & \venue{British Machine Vision Conference (BMVC 2020)} \\
+%     \textit{Code release:} & \url{https://github.com/bknyaz/sgg} \\
+%     \textit{Personal contributions:} & developed the key components of algorithms and models; developed the code; designed
+% and ran all experiments; wrote most of the article.
+% \end{tabular}
+
+\vspace{10pt}
+\densepar{Context.}
+Visual recognition models have been greatly improved across different applications largely due to the advances in convolutional neural networks (\cnns). Scene graph generation (SGG) is a task where objects and the relationships between them must be recognized from images~\citep{xu2017scene}. Many state of the art SGG models have tuned their performance for frequent compositions of objects and relationships~\citep{zellers2018neural}. Unfortunately, there is an extreme reduction in performance of these models on rare or unseen compositions~\citep{tang2020unbiased}. Understanding and addressing this problem in a realistic large-scale setup is challenging yet needed to increase the  practical value of SGG models.\looseness-1
+
+\densepar{Contributions.}
+We analyzed the loss function typically used to train SGG models and found that it ignores an important property of visual scene graphs --- graph density (number of edges \wrt the number of nodes). To address this issue, we developed a loss with terms that are normalized according to the graph density. The SGG models trained with our graph-density normalized loss significantly improve in generalization to rare and unseen compositions.
+
+\densepar{Recent works.}
+\citet{tang2020unbiased} proposed a method based on causal inference to ``debias'' SGG models and improve generalization. In line with our work, \citet{suhail2021energy} proposed an improved loss function based on energy defined on graphs. \citet{khandelwal2021segmentation} added more precise object representation in the form of segmentation masks that also improved compositional generalization. \citet{liu2021fully} proposed relation affinity fields to better generalize to unseen/rare compositions. While these approaches are applied to the SGG task, object-centric learning is a more general-purpose method that can potentially improve generalization in a larger variety of visual tasks~\citep{locatello2020object,dittadi2021generalization}.
