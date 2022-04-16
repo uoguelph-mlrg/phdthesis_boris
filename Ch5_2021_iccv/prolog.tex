@@ -1,0 +1,28 @@
+%\chapter{PROLOGUE TO THIRD ARTICLE}
+\section*{Prologue}
+\addcontentsline{toc}{section}{Prologue}
+
+% \begin{tabular}{p{0.16\linewidth}p{0.78\linewidth}}
+%      \textit{Title:} & Generative Compositional Augmentations for Scene Graph Prediction \\
+%      \textit{Authors:} & Boris Knyazev, Harm de Vries, Cătălina Cangea, Graham Taylor, Aaron Courville, Eugene Belilovsky \\
+%      \textit{Published at:} & \venue{International Conference on Computer Vision (ICCV 2021)} \\
+%     \textit{Code release:} & \url{https://github.com/bknyaz/sgg} \\
+%     \textit{Personal contributions:} & developed the key components of algorithms and models; developed the code; designed
+% and ran all experiments; wrote most of the article.
+% \end{tabular}
+
+\vspace{5pt}
+\densepar{Context.}
+In the previous chapter, our proposed method improved compositional generalization in the scene graph generation (SGG) task. %Specifically, we improved model's generalization to rare and unseen visual compositions. 
+Despite our work and other works addressing compositional generalization, the performance of SGG models remains very low on rare and unseen compositions. The low performance may be in large part due to the inherent bias present in the training datasets. In particular, most training images and corresponding annotations contain only very frequent visual compositions. Therefore, one straightforward approach to mitigate this bias may be to directly increase the size of the training dataset by adding more of the rare compositions. However, it is challenging to augment graphs and to collect or synthesize corresponding images, especially for a large-scale SGG task.
+
+\densepar{Contributions.}
+We develop a method based on conditional generative adversarial networks (cGANs). Our cGAN leverages recent advancements in GANs (\eg \citep{SPADE}) and allows to generate visual features conditioned on rare and unseen compositions. We create these compositions by perturbing existing scene graphs from the Visual Genome dataset. Our cGAN model can be added to existing SGG models and we show that it improves their generalization ability.
+
+
+%\vspace{-3pt}
+\densepar{Recent works.}
+In the scene understanding domain, there was an approach similar to ours that also generated features for novel compositions created randomly~\citep{wang2019generating}.
+%However, our approach is applied in a more challenging SGG task and allows for creation of more realistic rare composition. 
+In other visual tasks, where there is no extra complexity due to graphs, simple augmentation approaches based on adversarial training~\citep{shetty2020towards}, and cut-paste techniques~\citep{dwibedi2017cut,dvornik2018modeling,tripathi2019learning,ghiasi2021simple} have been improving generalization.
+In domains beyond vision, such as natural language processing (NLP)~\citep{joshi2021investigation} and reinforcement learning~\citep{hill2019environmental}, ideas similar to ours (generally based on counter-factual augmentation in NLP~\citep{kaushik2019learning}) have been adopted to reduce bias and improve generalization.
