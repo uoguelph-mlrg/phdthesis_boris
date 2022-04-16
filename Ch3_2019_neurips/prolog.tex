@@ -1,0 +1,32 @@
+%\chapter{PROLOGUE TO FIRST ARTICLE}
+\section*{Prologue}
+\addcontentsline{toc}{section}{Prologue}
+
+%\hspace{-8pt}
+% \begin{tabular}{p{0.16\linewidth}p{0.78\linewidth}}
+%      \textit{Title:} & Understanding Attention and Generalization in Graph Neural Networks \\
+%      \textit{Authors:} & Boris Knyazev, Graham Taylor, Mohamed Amer \\
+%      \textit{Published at:} & \venue{Neural Information Processing Systems (NeurIPS 2019)} \\
+%     \textit{Code release:} & \url{https://github.com/bknyaz/graph_attention_pool} \\
+%     \textit{Personal contributions:} & developed the key components of algorithms and models; developed the code; designed
+% and ran all experiments; wrote most of the article.
+% \end{tabular}
+
+\vspace{5pt}
+\densepar{Context.}
+Graph neural networks (\gnns) are state of the art models for machine learning on graphs (see~\citep{wu2020comprehensive,bronstein2017geometric,hamilton2017representation} for reviews). The downstream performance of \gnns is often improved by learning an attention module deciding which graph substructures are important for a given task~\citep{graphunet2018}. However, prior work on attention has not analyzed if attention learns anything useful about the task or whether the performance improvement is due to other confounding factors associated with adding attention. Compared to more intuitive tasks like image classification, in graph tasks it is often challenging to annotate ground truth about which graph substructures are important for the task. Therefore, it is especially challenging to understand the effect of attention in \gnns.
+
+
+%\vspace{-3pt}
+\densepar{Contributions.}
+We developed synthetic tasks where we can easily define ground truth importance of graph substructures for the task. Using these tasks, we found that attention can learn useful patterns about data if attention modules are initialized in a ``good'' way. We also found that the initialization effect is especially pronounced on the generalization ability of \gnns, in particular when evaluated on larger and more noisy graphs compared to the graphs used to train \gnns.
+%We show that a strong inductive bias to generalization to larger and noisy graphs can be incorporated by carefully initializing the attention modules of \gnns. 
+We show that on real graph datasets, such a ``good'' initialization is hard to achieve. To this end, we provide a simple method that makes attention modules less sensitive to initialization. Consequently, we show improved generalization in several real graph tasks.
+
+
+%\vspace{-3pt}
+\densepar{Recent works.}
+The datasets we had introduced in our paper have been subsequently used in recent works~\citep{dwivedi2020benchmarking,vincent2021online,ma2020adaptive,wang2020haar}. Motivated by our work, attention and attention-based pooling in \gnns has been improved to extract graph substructures more accurately~\citep{kim2020find,wang2020haar,ji2020hopgat}.
+Evaluating the generalization of \gnns \wrt the graph size and other properties have become common~\citep{velivckovic2019neural,verma2019stability,sinha2020evaluating}.
+%While ours and most other works study generalization in \gnns from the empirical view, 
+Theoretical generalization bounds for \gnns studied in~\citep{garg2020generalization} complement our empirical results by providing conditions for \gnns generalization.

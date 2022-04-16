@@ -1,0 +1,523 @@
+\graphicspath{{Ch3_2019_neurips/figs/}}
+
+\chapter{{Understanding Attention and Generalization in Graph Neural Networks}\label{ch:neurips2019}}
+
+\input{Ch3_2019_neurips/prolog}
+
+\section{Attention meets pooling in graph neural networks}\label{sec:attn_intro}
+
+The practical importance of attention in deep learning is well-established and there are many arguments in its favor~\citep{vaswani2017attention}, including interpretability~\citep{park2016attentive, deac2018attentive}.
+In graph neural networks (\gnns), attention can be defined over edges~\citep{velickovic2017graph, zhang2018gaan} or over nodes~\citep{lee2018graph}. In this work, we focus on the latter, because, despite being equally important in certain tasks, it is not as thoroughly studied~\citep{lee2018attention}. To begin our description, we first establish a connection between attention and pooling methods.
+In convolutional neural networks (CNNs), pooling methods are generally based on uniformly dividing the regular grid (such as one-dimensional temporal grid in audio) into local regions and taking a single value from that region (average, weighted average, max, stochastic, etc.), while attention in CNNs is typically a separate mechanism that weights $C$-dimensional input $\X \in \mathbb{R}^{N \times C}$:
+%
+\begin{equation}
+\label{eq:attn}
+\Z = \mathbf{\alpha} \odot \X,
+\end{equation}
+%
+\noindent where $\Z_i = \mathbf{\alpha}_i \X_i$ - output for unit (node in a graph) $i$, $\sum_i^N \mathbf{\alpha}_i = 1$, $\odot$ - element-wise multiplication, $N$ - the number of units in the input (i.e. number of nodes in a graph).
+
+In \gnns, pooling methods generally follow the same pattern as in CNNs, but the pooling regions (sets of nodes) are often found based on clustering~\citep{defferrard2016convolutional, shaham2018spectralnet, ying2018hierarchical}, since there is no grid that can be uniformly divided into regions in the same way across all examples (graphs) in the dataset.
+Recently, top-k pooling~\citep{graphunet2018} was proposed, diverging from other methods: instead of clustering ``similar'' nodes, it propagates only part of the input and this part is not uniformly sampled from the input. Top-k pooling can thus select some local part of the input graph, completely ignoring the rest. For this reason at first glance it does not appear to be logical.
+
+However, we can notice that pooled feature maps in~\cite[Eq.~2]{graphunet2018} are computed in the same way as attention outputs $\Z$ in \eqref{eq:attn} above, if we rewrite their Eq.~2 in the following way:
+%
+\begin{equation}
+\label{eq:top-k}
+%	\Z_i = \mathbf{\alpha}_i X_i, \forall i \in P, \Z_i = \emptyset, \forall i \notin P
+%\[
+\Z_i =
+\begin{cases}
+\mathbf{\alpha}_i \X_i,& \forall i \in P\\
+\emptyset, & \text{otherwise} ,
+\end{cases}
+%\]
+\end{equation}
+%
+where $P$ is a set of indices of pooled nodes, $|P| \leq N$, and $\emptyset$ denotes the unit is absent in the output.
+
+The only difference between \eqref{eq:top-k} and \eqref{eq:attn} is that $\Z \in \mathbb{R}^{|P| \times C}$, i.e. the number of units in the output is smaller or, formally, there exists a ratio $r=|P| / N \leq 1$ of preserved nodes.
+We leverage this finding to integrate attention and pooling into a unified computational block of a GNN.
+In contrast, in CNNs, it is challenging to achieve this, because the input is defined on a regular grid, so we need to maintain resolution for all examples in the dataset after each pooling layer.
+In \gnns, we can remove any number of nodes, so that the next layer will receive a smaller graph. When applied to the input layer, this form of attention-based pooling also brings us interpretability of predictions, since the network makes a decision only based on pooled nodes.
+
+\begin{figure}[t]
+	\begin{center}
+		\small
+		\begin{tabular}{ccc}
+			{\includegraphics[width=0.3\textwidth, align=c, trim={0cm 6.5cm 20.7cm 6cm}, clip]{tasks}} &
+			{\includegraphics[width=0.27\textwidth, align=c, trim={10cm 6cm 10.8cm 6.1cm}, clip]{tasks}} &
+			{\includegraphics[width=0.3\textwidth, align=c, trim={20cm 6cm 0.3cm 6cm}, clip]{tasks}} \\
+			(a) \textsc{Colors} & (b) \textsc{Triangles} & (c) \mnistfull \\
+		\end{tabular}
+	\end{center}
+	\vspace{-10pt}
+	\caption{\small Three tasks with a controlled environment we consider in this work. The values inside the nodes are ground truth attention coefficients, $\mathbf{\alpha}_i^{GT}$, which we find heuristically (see \secref{\ref{sec:datasets}}).}
+	\label{fig:tasks}
+\end{figure}
+%
+Despite the appealing nature of attention, it is often unstable to train and the conditions under which it fails or succeeds are unclear.
+Motivated by insights of~\citep{xu2018powerful} recently proposed Graph Isomorphism Networks (GIN), we design two simple graph reasoning tasks
+that allow us to study attention in a controlled environment where we know ground truth attention.
+The first task is counting colors in a graph (\textsc{Colors}), where a color is a unique discrete feature. The second task is counting the number of triangles in a graph (\textsc{Triangles}). We confirm our observations on a standard benchmark, \mnistfull~\citep{lecun1998gradient} (\fig{\ref{fig:tasks}}), and identify factors influencing the effectiveness of attention.
+
+Our synthetic experiments also allow us to study the ability of attention \gnns to generalize to larger, more complex or noisy graphs. Aiming to provide a recipe to train more effective, stable and robust attention \gnns, we propose a \wsup~scheme to train attention, that does not require ground truth attention scores, and as such is agnostic to a dataset and the choice of a model.
+We validate the effectiveness of this scheme on our synthetic datasets, as well as on \mnistfull~and on real graph classification benchmarks in which ground truth attention is unavailable and hard to define, namely \collab~\citep{leskovec2007graph, shrivastava2014new}, \proteins~\citep{borgwardt2005protein}, and \dd~\citep{dobson2003distinguishing}.
+
+\section{Model}
+
+We study two variants of \gnns: Graph Convolutional Networks (GCN)~\citep{kipf2016semi} and Graph Isomorphism Networks (GIN)~\citep{xu2018powerful}. One of the main ideas of GIN is to replace the \textsc{Mean} aggregator over nodes, such as the one in GCN, with a \textsc{Sum} aggregator, and add more fully-connected layers after aggregating neigboring node features. The resulting model can distinguish a wider range of graph structures than previous models~\cite[Figure 3]{xu2018powerful}.
+
+\subsection{Thresholding by attention coefficients}
+To pool the nodes in a graph using the method from\citep{graphunet2018} a predefined ratio $r=|P| / N$ must be chosen for the entire dataset \eqref{eq:top-k}. For instance, for $r=0.8$ only 80\% of nodes are left after each pooling layer. Intuitively, it is clear that this ratio should be different for small and large graphs.
+Therefore, we propose to choose threshold $\tilde{\mathbf{\alpha}}$, such that only nodes with attention values $\mathbf{\alpha}_i > \tilde{\mathbf{\alpha}}$ are propagated:
+%
+\begin{equation}
+\label{eq:top-k_ours}
+%\Z_i = \mathbf{\alpha}_i \X_i, \forall\ i: \mathbf{\alpha}_i > \tilde{\mathbf{\alpha}}.
+\Z_i =
+\begin{cases}
+\mathbf{\alpha}_i \X_i,& \forall i: \mathbf{\alpha}_i > \tilde{\mathbf{\alpha}} \\
+\emptyset, & \text{otherwise}.
+\end{cases}
+\end{equation}
+%
+Note, that dropping nodes from a graph is different from keeping nodes with very small, or even zero, feature values, because a bias is added to node features after the following graph convolution layer affecting features of neighbors. An important potential issue of dropping nodes is the change of graph structure and emergence of isolated nodes. However, in our experiments we typically observe that the model predicts similar $\mathbf{\alpha}$ for nearby nodes, so that an entire local neighborhood is pooled or dropped, as opposed to clustering-based methods which collapse each neighborhood to a single node. We provide a quantitative and qualitative comparison in \secref{\ref{sec:exper}}.
+
+\subsection{Attention subnetwork}
+To train an attention model that predicts the coefficients for nodes, we consider two approaches: (1)~Linear Projection~\citep{graphunet2018}, where a single layer projection $\mathbf{p} \in \mathbb{R}^C$ is trained: $\mathbf{\alpha}_{pre} = \X \mathbf{p}$; and (2)~DiffPool~\citep{ying2018hierarchical}, where a separate \gnn is trained:
+%
+\begin{equation}
+\label{eq:attn_gcn}
+\mathbf{\alpha}_{pre} = \text{GNN}(\A, \X),
+\end{equation}
+%
+where $\A$ is the adjacency matrix of a graph.
+In all cases, we use a softmax activation~\citep{vaswani2017attention,park2016attentive} instead of tanh in~\citep{graphunet2018}, because it provides more interpretable results  and ecourages sparse outputs: $\mathbf{\alpha} = \text{softmax}(\mathbf{\alpha}_{pre})$.
+To train attention in a supervised or \wsup~way, we use the Kullback-Leibler divergence loss (see \secref{\ref{sec:arch_train}}).
+
+Note that the GNN used in \eqref{eq:attn_gcn} is called an attention subnetwork because its outputs $\mathbf{\alpha} = \text{softmax}(\mathbf{\alpha}_{pre})$ are used to weight the input node features $\X$ according to \eqref{eq:top-k_ours}: $\Z = \mathbf{\alpha} \odot \X$. This way $\mathbf{\alpha}$ defines how much the following layers pay attention (or attend) to each of the nodes as we discuss in \secref{\ref{sec:attn_intro}}.
+
+\subsection{ChebyGIN}
+
+In some of our experiments, the performance of both GCNs and GINs is quite poor and, consequently, it is also hard for the attention subnetwork to learn. By combining GIN~\citep{xu2018powerful} with ChebyNet~\citep{defferrard2016convolutional}, we propose a stronger model, ChebyGIN.
+ChebyNet is a multiscale extension of GCN~\citep{kipf2016semi}, so that for the first scale, $k=0$, node features are node features themselves, for $k=1$ features are averaged over one-hop neighbors, for $k=2$ - over two-hop neighbors and so forth (see \eqref{eq:cheb_graph_conv} in \S~\ref{sec:bg_gnn}).
+To implement the \textsc{Sum} aggregator in ChebyGIN, we multiply node features $\X$ by a diagonal node degree matrix $\D_{ii}=\sum_j \A_{ij}$ starting from $k=1$. We also add more fully-connected layers (denoted as $\text{MLP}^{(l)}$) after feature aggregation as in GIN. Thus, following \eqref{eq:cheb_graph_conv}, the $l$-th layer of our ChebyGIN is defined as:
+%
+\begin{equation}
+\label{eq:chebygin}
+\X^{(l+1)} = \text{MLP}^{(l)} \Big(\sum^{K-1}_{k=0} \D_{ii}^{(k)} T_k(\tilde{\Lapl}) \X^{(l)} \W^{(l)}_k \Big),
+\end{equation}
+%
+\noindent where $\D_{ii}^{(k)} = \mathbf{I}_N$ for $k=0$ and $\D_{ii}^{(k)} = \sum_j \A_{ij}$ for $k > 0$. $T_k(\tilde{\Lapl})$ are the Chebyshev polynomials applied to a rescaled graph Laplacian $\tilde{\Lapl}$; $\W^{(l)}_k$ are trainable weights. See a detailed description of these terms in \S~\ref{sec:bg_gnn} and the implementation details of ChebyGIN in our code \url{https://github.com/bknyaz/graph_attention_pool/blob/master/chebygin.py}.
+
+\section{Experiments}
+\label{sec:exper}
+We introduce the color counting task (\textsc{Colors}) and the triangle counting task (\textsc{Triangles}) in which we generate synthetic training and test graphs. We also experiment with MNIST images~\citep{lecun1998gradient} and three molecule and social datasets. In \colors, \tri~and \mnistfull~tasks (\fig{\ref{fig:tasks}}), we assume to know ground truth attention, i.e. for each node~$i$ we heuristically define its importance in solving the task correctly, $\mathbf{\alpha}_i^{GT} \in [0,1]$, which is necessary to train (in the supervised case) and evaluate our attention models.
+
+
+\subsection{Datasets}
+\label{sec:datasets}
+\densepar{\textsc{Colors}.} We introduce the color counting task. We generate random graphs where features for each node are assigned to one of the three one-hot values (colors): [1,0,0] (red), [0,1,0] (green), [0,0,1] (blue). The task is to count the number of green nodes, $N_{green}$. This is a trivial task, but it lets us study the influence of initialization of the attention model $\mathbf{p} \in \mathbb{R}^3$ on the training dynamics.
+In this task, graph structure is unimportant and edges of graphs act like a medium to exchange node features. Ground truth attention is $\mathbf{\alpha}_i^{GT}=1 / N_{green}$, when $i$ corresponds to green nodes and $\mathbf{\alpha}_i^{GT}=0$ otherwise.
+We also extend this dataset to higher $n$-dimensional cases $\mathbf{p} \in \mathbb{R}^n$ to study how model performance changes with $n$.
+In these cases, node features are still one-hot vectors and we classify the number of nodes where the second feature is one.
+
+\densepar{\textsc{Triangles}.} Counting the number of triangles in a graph is a well-known task which can be solved analytically by computing $\text{trace}(\A^3) / 6$, where $\A$ is an adjacency matrix. This task turned out to be hard for \gnns, so we add node degree features as one-hot vectors to all graphs, so that the model can exploit both graph structure and features. Compared to the \textsc{Colors} task, here it is more challenging to study the effect of initializing $\mathbf{p}$, but we can still calculate ground truth attention as $\mathbf{\alpha}_i^{GT}=T_i / \sum_i T_i$, where $T_i$ is the number of triangles that include node $i$, so that $\mathbf{\alpha}_i^{GT} = 0$ for nodes that are not part of triangles.
+
+\densepar{\textsc{Mnist-75sp}.} \textsc{Mnist}~\citep{lecun1998gradient} contains 70k grayscale images of size 28$\times$28 pixels. While each of 784 pixels can be represented as a node, we follow~\citep{monti2017geometric, fey2018splinecnn} and consider an alternative approach to highlight the ability of \gnns to work on irregular grids. In particular, each image can be represented as a small set of superpixels without losing essential class-specific information (see \fig{\ref{fig:test_subsets}}). We compute SLIC~\citep{achanta2012slic} superpixels for each image and build a graph, in which each node corresponds to a superpixel with node features being pixel intensity values and coordinates of their centers of masses. We extract $N\leq75$ superpixels, hence the dataset is denoted as \mnist.
+Edges are formed based on spatial distance between superpixel centers as in~\cite[Eq.~8]{defferrard2016convolutional}. Each image depicts a handwritten digit from 0 to 9 and the task is to classify the image. Ground truth attention is considered to be $\mathbf{\alpha}_i^{GT}=1 / N_{nonzero}$ for superpixels with nonzero intensity, and $N_{nonzero}$ is the total number of such superpixels. The idea is that only nonzero superpixels determine the digit class.\looseness-1
+
+\densepar{Molecule and social datasets.}
+\label{sec:graph_data}
+We extend our study to more practical cases, where ground truth attention is not available, and experiment with protein datasets: \proteins~\citep{borgwardt2005protein} and \dd~\citep{dobson2003distinguishing}, and a scientific collaboration dataset, \collab~\citep{leskovec2007graph, shrivastava2014new}.
+These are standard graph classification benchmarks.
+A standard way to evaluate models on these datasets is to perform 10-fold cross-validation and report average accuracy~\citep{yanardag2015deep, ying2018hierarchical}.
+In this work, we are concerned about a model's ability to generalize to larger and more complex or noisy graphs, therefore, we generate splits based on the number of nodes. For instance, for \proteins~we train on graphs with $ N \leq 25$ nodes and test on graphs with $ 6 \leq N \leq 620$ nodes (see Table~\ref{table:results_graphs} for details about splits of other datasets and results).\looseness-1
+
+%A detailed description of tasks and model hyperparameters is provided in the \apdx.
+
+%\vspace{-10pt}
+\subsection{Generalization to larger and noisy graphs}
+%\vspace{-10pt}
+One of the core strengths of attention is that it makes it easier to generalize to unseen, potentially more complex and/or noisy, inputs by reducing them to better resemble certain inputs in the training set. To examine this phenomenon, for \textsc{Colors} and \textsc{Triangles} tasks we add test graphs that can be several times larger (\textsc{Test-Large}) than the training ones. For \textsc{Colors} we further extend it by adding unseen colors to the test set (\textsc{Test-LargeC}) in the format $[c_1, c_2, c_3, c_4]$, where $c_i=0$ for $i \neq 2$ if $c_2=1$ and $c_i \in [0,1]$ for $i \neq 2$ if $c_2=0$, i.e.~there is no new colors that have nonzero values in a green channel. This can be interpreted as adding mixtures of red, blue and transparency channels, with nine possible colors in total as opposed to three in the training set (\fig{\ref{fig:test_subsets}}).
+
+
+\newcommand{\figwidth}{0.14\textwidth}
+\newcommand{\rangeupper}[1]{\tiny{($N\leq#1$)}}
+\newcommand{\rangetwo}[2]{\tiny{($#1<N\leq#2$)}}
+\begin{figure}[h!]
+    \newcommand{\figtasks}[2]{\includegraphics[width=\figwidth, align=c, trim=#1, clip]{#2}}
+    \centering
+	\begin{center}
+		\scriptsize
+		\setlength{\tabcolsep}{7pt}
+		\begin{tabularx}{\textwidth}{ccccc}
+			{\rotatebox[origin=c]{90}{\textsc{\textbf{Colors}} }} &
+			\figtasks{{2cm 0.5cm 1.3cm 1.3cm}}{colors_train.pdf} &
+			\figtasks{{2cm 0.5cm 1.3cm 1.3cm}}{colors_test1.pdf} &
+			\figtasks{{2cm 0.5cm 1.3cm 1.3cm}}{colors_test2.pdf} &
+			\figtasks{{2cm 0.5cm 1.3cm 1.3cm}}{colors_test_mix.pdf} \\
+			& \textsc{Train} \rangeupper{25} & \textsc{Test-Orig} \rangeupper{25} & \textsc{Test-Large} \rangetwo{25}{200} & \textsc{Test-LargeC} \rangetwo{25}{200} \\
+			\hline \\
+		\end{tabularx}
+		\setlength{\tabcolsep}{21pt}
+		\begin{tabularx}{\textwidth}{cccc}
+			\hspace{-25pt}
+			\multirow{2}{*}{\rotatebox[origin=c]{90}{\parbox{0.8cm}{\textsc{\textbf{Triangles}}}}} &
+			\figtasks{{1.5cm 0.7cm 0cm 0cm}}{triangles_train1.pdf} &
+			\figtasks{{1.5cm 0.7cm 0cm 0cm}}{triangles_test1.pdf} &
+			\figtasks{{1.5cm 0.7cm 0cm 0cm}}{triangles_test2.pdf} \\
+			& \textsc{Train} \rangeupper{25} & \textsc{Test-Orig} \rangeupper{25} & \textsc{Test-Large} \rangetwo{25}{100}\\
+			\hline \\
+		\end{tabularx}
+		\setlength{\tabcolsep}{12pt}
+		\begin{tabularx}{\textwidth}{ccccc}
+			\hspace{-7pt} \multirow{2}{*}{\rotatebox[origin=c]{90}{\parbox{0.9cm}{\mbox{\textbf{\mnist}}}}} &
+			\figtasks{{0cm 0cm 0cm 0cm}}{7_train_75sp.pdf} &
+			\figtasks{{0cm 0cm 0cm 0cm}}{7_test_75sp.pdf} &
+			\figtasks{{0cm 0cm 0cm 0cm}}{7_noise0_4_test_75sp.pdf} &
+			\figtasks{{0cm 0cm 0cm 0cm}}{7_colornoise0_6_test_75sp.pdf} \\
+			& \textsc{Train}\tiny{($N=64$)} & \textsc{Test-Orig}\tiny{($N=63$)} & \textsc{Test-Noisy}\tiny{($N=63$)} & \textsc{Test-NoisyC}\tiny{($N=63$)} \\
+		\end{tabularx}
+	\end{center}
+	\vspace{-10pt}
+	\caption{\small Examples from training and test sets. For \colors, the correct label is $N_{green}=4$ in all cases; for \tri~$N_{tri}=3$ and color intensities denote ground truth attention values $\mathbf{\alpha}^{GT}$. The range of the number of nodes, $N$, is shown in each case. For \mnist, we visualize graphs for digit 7 by assigning an average intensity value to all pixels within a superpixel. Even though superpixels have certain shapes and borders between each other (visible only on noisy graphs), we feed only superpixel intensities and coordinates of their centers of masses to our \gnns.}
+	\label{fig:test_subsets}
+	\vspace{-8pt}
+\end{figure}
+
+Neural networks (NNs) have been observed to be brittle if they are fed with test samples corrupted in a subtle way, i.e.~by adding a noise~\citep{dodge2017study} or changing a sample in an adversarial way~\citep{szegedy2013intriguing}, such that a human can still recognize them fairly well. To study this problem, test sets of standard image benchmarks have been enlarged by adding corrupted images~\citep{hendrycks2019benchmarking}.
+
+Graph neural networks, as a particular case of NNs, inherit this weakness. The attention mechanism, if designed and trained properly, can improve a net's robustness by attending to only important and ignoring misleading parts (nodes) of data. In this work, we explore the ability of \gnns with and without attention to generalize to noisy graphs and unseen node features. This should help us to understand the limits of \gnns, and potentially NNs in general, with attention and conditions when it succeedes and when it does not. To this end, we generate two additional test sets for \mnist. In the first set, \textsc{Test-Noisy}, we add Gaussian noise, drawn from $\mathcal{N}(0, 0.4)$, to superpixel intensity features, i.e.~the shape and coordinates of superpixels are the same as in the original clean test set. In the second set, \textsc{Test-Noisy-C}, we colorize images by adding two more channels and add independent Gaussian noise, drawn from $ \mathcal{N}(0, 0.6)$, to each channel (\fig{\ref{fig:test_subsets}}).
+
+\subsection{Network architectures and training}
+\label{sec:arch_train}
+We build 2 layer \gnns for \textsc{Colors} and 3 layer \gnns for other tasks with 64 filters in each layer, except for \mnist~where we have more filters. Our baselines are \gnns with global sum or max pooling (gpool), DiffPool~\citep{ying2018hierarchical} and top-k pooling~\citep{graphunet2018}. We add two layers of our pooling for \tri, each of which is a \gnn with 3 layers and 32 filters \eqref{eq:attn_gcn}; whereas a single pooling layer in the form of vector $\mathbf{p}$ is used in other cases.
+We train all models with Adam~\citep{kingma2014adam}, learning rate 1e-3, batch size 32, weight decay 1e-4.
+
+For \textsc{Colors} and \textsc{Triangles} we minimize the regression loss (MSE) and cross entropy (CE) for other tasks, denoted as $\mathcal{L}_{MSE/CE}$. For experiments with supervised and \wsup~(described below in \secref{\ref{sec:wsup}}) attention, we additionally minimize the Kullback-Leibler (KL) divergence loss between ground truth attention $\mathbf{\alpha}^{GT}$ and predicted coefficients $\mathbf{\alpha}$. The KL term is weighted by scale $\beta$, so that the total loss for some training graph with $N$ nodes becomes:
+%
+\begin{equation}
+\label{eq:kl_div_loss}
+\mathcal{L} = \mathcal{L}_{MSE/CE} + \frac{\beta}{N}\sum_i \mathbf{\alpha}_i^{GT} \text{log}(\frac{\mathbf{\alpha}_i^{GT}}{\mathbf{\alpha}_i}).
+\end{equation}
+%
+%where $\beta$ controls the scale and importance of the KL term.
+%
+We repeat experiments at least 10 times and report an average accuracy and standard deviation in Tables~\ref{table:results} and~\ref{table:results_graphs}.
+For \colors~we run experiments 100 times, since we observe larger variance.
+In Table~\ref{table:results} we report results on all test subsets independently.
+In all other experiments on \synthetic, we report an average accuracy on the combined test set.
+For \real, we run experiments 10 times using splits described in \secref{\ref{sec:graph_data}}.
+
+The only hyperparameters that we tune in our experiments are threshold $\tilde{\mathbf{\alpha}}$ in our method \eqref{eq:top-k_ours}, ratio $r$ in top-k \eqref{eq:top-k} and $\beta$ in \eqref{eq:kl_div_loss}. For synthetic datasets, we tune them on a validation set generated in the same way as \textsc{Test-Orig}. For \mnist, we use part of the training set. For \real, we tune them using 10-fold cross-validation on the training set.
+
+
+\densepar{Attention correctness.} We evaluate attention correctness using area under the ROC curve (AUC) as an alternative to other methods, such as~\citep{liu2017attention}, which can be overoptimistic in some extreme cases, such as when all attention is concentrated in a single node or attention is uniformly spread over all nodes. AUC allows us to evaluate the ranking of $\mathbf{\alpha}$ instead of their absolute values. Compared to ranking metrics, such as rank correlation, AUC enables us to directly choose a pooling threshold $\tilde{\mathbf{\alpha}}$ from the ROC curve by finding a desired balance between false-positives (pooling unimportant nodes) and false-negatives (dropping important nodes).
+
+To evaluate attention correctness of models with global pooling, we follow the idea from convolutional neural networks~\citep{zeiler2014visualizing}. After training a model, we remove node $i \in [1, N]$ and compute an absolute difference from prediction $y$ for the original graph:
+%
+\begin{equation}
+\label{eq:heat_maps}
+\mathbf{\alpha}_i^{WS} = \frac{|y_i - y|}{\sum_{j=1}^N |y_j - y|},
+\end{equation}
+%
+where $y_i$ is a model's prediction for the graph without node $i$.
+While this method shows surprisingly high AUC in some tasks, it is not built-in in training and thus does not help to train a better model and only implicitly interprets a model's prediction (Figures~\ref{fig:attn_mnist} and~\ref{fig:attn_graphs}). However, these results inspired us to design a \wsup~method described below.
+
+\subsection{Weakly-supervised attention supervision}
+\label{sec:wsup}
+Although for \colors, \tri~and \mnist~we can define ground truth attention, so that it does not require manual labeling, in practice it is usually not the case and such annotations are hard to define and expensive, or even unclear how to produce. Based on results in Table~\ref{table:results}, supervision of attention is necessary to reveal its power. Therefore, we propose a weakly-supervised approach, agnostic to the choice of a dataset and model, that does not require ground truth attention labels, but can improve a model's ability to generalize.
+Our approach is based on generating attention coefficients $\mathbf{\alpha}_i^{WS}$ \eqref{eq:heat_maps} and using them as labels to train our attention model with the loss defined in Eq~\ref{eq:kl_div_loss}.
+We apply this approach to \colors, \tri~and \mnist~and observe peformance and robustness close to supervised models. We also apply it to \collab, \proteins~and \dd, and in all cases we are able to improve results compared to unsupervised attention.
+
+\textbf{Training weakly-supervised models.}
+Assume we want to train model \textbf{A} with ``weak-sup'' attention on a dataset without ground truth attention. We first need to train model \textbf{B} that has the same architecture as \textbf{A}, but does not have any attention/pooling between graph convolution layers. So, model \textbf{B} has only global pooling. After training \textbf{B} with the $\mathcal{L}_{MSE/CE}$ loss, we need to evaluate training graphs on \textbf{B} in the same way as during computation of $\mathbf{\alpha}^{WS}$ in \eqref{eq:heat_maps}. In particular, for each training graph $\cal G$ with $N$ nodes, we first make a prediction $y$ for the entire $\cal G$. Then, for each $i \in [1,N]$, we remove node $i$ from $\cal G$, and feed this reduced graph with $N-1$ nodes to model \textbf{B} recording the model's prediction $y_i$. We then use \eqref{eq:heat_maps} to compute $\mathbf{\alpha}^{WS}$ based on $y$ and $y_i$. Now, we can train \textbf{A} and use $\mathbf{\alpha}^{WS}$ instead of ground truth $\mathbf{\alpha}^{GT}$ in \eqref{eq:kl_div_loss} to optimize both \textit{MSE/CE} and \textit{KL} losses.\looseness-1
+
+%\definecolor{extreme}{gray}{0.85}
+%\definecolor{bad}{gray}{0.95}
+
+
+\begin{table}[b!]
+	%\newcommand\crule[3][black]{\textcolor{#1}{\rule{#2}{#3}}}
+	%\vspace{-8pt}
+	\caption{\small \textbf{Results on three tasks for different test subsets.} $\pm$ denotes standard deviation, not shown in case of small values (large values are explained in \secref{\ref{sec:results}}). \textsc{Attn} denotes attention accuracy in terms of AUC and is computed for the combined test set. The best result in each column (ignoring upper bound results) is bolded.
+	\crule[bad]{12pt}{8pt} denotes poor results with relatively low accuracy and/or high variance;
+	\crule[extreme]{12pt}{8pt} denotes failed cases with accuracy close to random and/or extremely high variance. $^\dagger$~For \colors~and \mnist, ChebyNets are used instead of ChebyGINs.\looseness-1}
+    \vspace{-10pt}
+	\scriptsize
+	\label{table:results}
+	\begin{center}
+		\setlength{\tabcolsep}{2pt}
+		\begin{tabular}{clllll|lll|llll}
+			\toprule
+			&  &\multicolumn{4}{c|}{\bf \colors} & \multicolumn{3}{c|}{\bf \tri}  & \multicolumn{4}{c}{\bf \mnist}\Tstrut\\
+			& & \textsc{Orig} & \textsc{Large} & \textsc{LargeC} & \textsc{Attn} & \textsc{Orig} & \textsc{Large} & \textsc{Attn} & \textsc{Orig} & \textsc{Noisy} & \textsc{NoisyC} & \textsc{Attn} \\
+			\midrule\\
+			\multirow{3}{*}{\rotatebox[origin=c]{90}{\parbox{0.6cm}{\tiny \centering Global pool}}}
+			& GCN & 97 & \cellcolor{bad}72\std{15} & \cellcolor{extreme}20\std{3} & 99.6 & 46\std{1} & \cellcolor{extreme}23\std{1}  & 79 & \cellcolor{bad}78.3\std{2} & \cellcolor{extreme}38\std{4} & \cellcolor{extreme}36\std{4} & 72\std{2}\\
+			& GIN & \cellcolor{bad}96\std{10} & \cellcolor{bad}71\std{22} & \cellcolor{extreme}26\std{11} & 99.2 & 50\std{1} & \cellcolor{extreme}22\std{1} & 77 & 87.6\std{3} & \cellcolor{extreme}55\std{11} & \cellcolor{extreme}51\std{12} & 71\std{5} \\
+			& ChebyGIN$^\dagger$ & \textbf{100} & \cellcolor{bad}93\std{12} & \cellcolor{extreme}15\std{7} & 99.8 & 66\std{1} & \cellcolor{bad}30\std{1} & 79 & \textbf{97.4} & \cellcolor{bad}80\std{12} & \cellcolor{bad}79\std{11} & 72\std{3} \\
+			\hline \\
+			\multirow{4}{*}{\rotatebox[origin=c]{90}{\parbox{1cm}{\tiny \centering Unsuperv.}}} &
+			GIN, top-k & 99.6 & \cellcolor{extreme}17\std{4} & \cellcolor{extreme}9\std{3}  & 75\std{6} & 47\std{2} & \cellcolor{extreme}18\std{1} & 63\std{5} & 86\std{6} & \cellcolor{extreme}59\std{26} & \cellcolor{extreme}55\std{23} & \cellcolor{extreme}65\std{34} \\
+			& GIN, ours & \cellcolor{bad}94\std{18} & \cellcolor{extreme}13\std{7} & \cellcolor{extreme}11\std{6} & \cellcolor{bad}72\std{15} & 47\std{3} & \cellcolor{extreme}20\std{2} & 68\std{3} & 82.6\std{8} & \cellcolor{extreme}51\std{28} & \cellcolor{extreme}47\std{24} & \cellcolor{extreme}58\std{31} \\
+			& ChebyGIN$^\dagger$, top-k & \textbf{100} & \cellcolor{extreme}11\std{7} & \cellcolor{extreme}6\std{6} & \cellcolor{bad}79\std{20} & 64\std{5} & \cellcolor{extreme}25\std{2} & 76\std{6} & 92.9\std{4} & \cellcolor{extreme}68\std{26} & \cellcolor{extreme}67\std{25} & \cellcolor{extreme}52\std{37} \\
+			& ChebyGIN$^\dagger$, ours & \cellcolor{extreme}80\std{30} & \cellcolor{extreme}16\std{10} & \cellcolor{extreme}11\std{6} & \cellcolor{bad}67\std{31} & 67\std{3} & \cellcolor{extreme}26\std{2} & 77\std{4} & 94.6\std{3} & \cellcolor{bad}80\std{23} & \cellcolor{bad}77\std{22} & \cellcolor{bad}78\std{31} \\
+			\hline \\
+			\multirow{4}{*}{\rotatebox[origin=c]{90}{\parbox{1cm}{\tiny Supervised}}}
+			& GIN, topk & \cellcolor{bad}87\std{1} & \cellcolor{extreme}39\std{18} & \cellcolor{extreme}28\std{8} & \textbf{99.9} & 49\std{1} & \cellcolor{extreme}20\std{1} & 88 & 90.5\std{1} & 85.5\std{2} & \cellcolor{bad}79\std{5} & 99.3 \\
+			& GIN, ours  & \textbf{100} & \textbf{96\std{9}} & \cellcolor{bad}\textbf{89\std{18}} & 99.8 & 49\std{1} & \cellcolor{extreme}22\std{1} & 76\std{1} & 90.9\std{0.4} & 85.0\std{1} & \cellcolor{bad}80\std{3} & 99.3 \\
+			& ChebyGIN$^\dagger$, topk & \textbf{100} & \cellcolor{bad}86\std{15} & \cellcolor{extreme}31\std{15} & 99.8 & 83\std{1} & \cellcolor{bad}39\std{1} & \textbf{97} & 95.1\std{{0.3}} & 90.6\std{0.8} & \cellcolor{bad}83\std{16} & \textbf{100}  \\
+			& ChebyGIN$^\dagger$, ours & \textbf{100} & 94\std{8} & \cellcolor{bad}75\std{17} & 99.8 & \textbf{88\std{1}} & \textbf{48\std{1}} & 96 & 95.4\std{0.2} & \textbf{92.3\std{0.4}} & \cellcolor{bad}\textbf{86\std{16}} & \textbf{100} \Bstrut \\
+			\hline \Tstrut \\
+			\multirow{1}{*}{\rotatebox[origin=c]{90}{\parbox{0.15cm}{\tiny \centering Weak sup.}}} &
+			ChebyGIN$^\dagger$, ours & \textbf{100} &  90\std{6} & \cellcolor{bad}73\std{14} & \textbf{99.9} & 68\std{1} & \cellcolor{bad}30\std{1} & 88 & 95.8\std{0.4} & 88.8\std{4} & \textbf{86\std{9}} & 96.5\std{1} \Tstrut \Bstrut\\
+			\hline
+			\hline \\
+			\multirow{2}{*}{\rotatebox[origin=c]{90}{\parbox{0.5cm}{\tiny \centering Upper bound}}}
+			& GIN & 100 & 100 & 100 & 100 & 94\std{1} & 85\std{2} & 100 & 93.6\std{0.4} & 90.8\std{1} & 90.8\std{1} & 100 \\
+			& ChebyGIN$^\dagger$ & 100 & 100 & 100 & 100 & 99.8 & 99.4\std{1} & 100 & 96.9\std{0.1} & 94.8\std{0.3} & 95.1\std{0.3} & 100 \\
+			\bottomrule
+			\vspace{-15pt}
+		\end{tabular}
+	\end{center}
+\end{table}
+
+
+\begin{figure}%[]
+	\begin{center}
+		\small
+		\setlength{\tabcolsep}{1.5pt}
+		\begin{tabular}{cccc}
+			\begin{tikzpicture}
+			\node[anchor=south west,inner sep=0] (image) at (0,0) {\includegraphics[width=0.24\textwidth, trim={0.3cm 0.4cm 0.3cm 0.3cm}, clip]{fig3/colors_gin_sup_ada_top_Acc_vs_AUC_dim3}};
+			\begin{scope}[x={(image.south east)},y={(image.north west)}]
+			\draw[green,thick,dashed,dash pattern=on 3pt off 2pt] (0.88,0.25) rectangle (0.97,0.98);
+			\end{scope}
+			\end{tikzpicture}
+			&
+			\includegraphics[width=0.24\textwidth, trim={0.3cm 0.4cm 0.3cm 0.3cm}, clip]{fig3/colors_gin_sup_ada_top_Acc_vs_AUC_zoomed_dim3} &
+
+			\begin{tikzpicture}
+			\node[anchor=south west,inner sep=0] (image) at (0,0) {\includegraphics[width=0.24\textwidth, trim={0.3cm 0.4cm 0.3cm 0.3cm}, clip]{fig3/colors_cheb_sup_ada_top_Acc_vs_AUC_dim3}};
+			\begin{scope}[x={(image.south east)},y={(image.north west)}]
+			\draw[green,thick,dashed,dash pattern=on 3pt off 2pt] (0.88,0.25) rectangle (0.97,0.98);
+			\end{scope}
+			\end{tikzpicture}
+			&
+			{\includegraphics[width=0.24\textwidth, trim={0.3cm 0.4cm 0.3cm 0.3cm}, clip]{fig3/colors_cheb_sup_ada_top_Acc_vs_AUC_zoomed_dim3}} \\
+			(a) & (a)-zoomed & (b) & (b)-zoomed \\
+
+			{\includegraphics[width=0.24\textwidth, align=c, trim={0.3cm 0.4cm 0.3cm 0.3cm}, clip]{fig3/GIN_AUC_vs_Cos_dim3_16}} &
+			\includegraphics[width=0.24\textwidth, align=c, trim={0.3cm 0.4cm 0.3cm 0.3cm}, clip]{fig3/Cheb_ACC_vs_Dim} &
+
+			{\includegraphics[width=0.24\textwidth, align=c, trim={0.3cm 0.4cm 0.3cm 0cm}, clip]{fig3/colors_gin_sup_ada_top_Acc_vs_AUC_dim16}} &
+			\includegraphics[width=0.24\textwidth, align=c, trim={0.3cm 0.4cm 0.3cm 0cm}, clip]{fig3/triangles_cheb_ACC_vs_Acc} \\
+			(c) & (d) & (e)  & (f)
+		\end{tabular}
+	\end{center}
+	\vspace{-18pt}
+	\caption{\small Disentangling factors influencing attention and classification accuracy for \textsc{Colors} \textit{(a-e)} and \textsc{Triangles} \textit{(f)}. Accuracies are computed over all test subsets. Notice the exponential growth of classification accuracy depending on attention correctness \textit{(a,b)}, see zoomed plots \textit{(a)}-zoomed, \textit{(b)}-zoomed for cases when attention AUC$>$95\%. \textit{(d)} Probability of a good initialization is estimated as the proportion of cases when cosine similarity $>$ 0.5; error bars indicate standard deviation. \textit{(c-e)} show results using a higher dimensional attention model, $\mathbf{p} \in \mathbb{R}^n$.}
+	%\vspace{-10pt}
+	\label{fig:accuracy_cos_sim}
+\end{figure}
+
+\section{Analysis of results}
+\label{sec:results}
+In this work, we aim to better understand attention and generalization in graph neural networks, and,  based on our empirical findings, below we provide our analysis for the following questions.
+
+\densepar{How powerful is attention over nodes in \gnns?}
+Our results on the \synthetic~datasets suggest that the main strength of attention over nodes in \gnns is the ability to generalize to more complex or noisy graphs at test time. This ability essentially transforms a model that fails to generalize into a fairly robust one. Indeed, a classification accuracy gap for \textsc{Colors-LargeC} between the best model without supervised attention (GIN with global pooling) and a similar model with supervised attention (GIN, sup) is more than 60\%. For \textsc{Triangles-Large} this gap is 18\%  and for \textsc{MNIST-75sp-Noisy} it is more than 12\%. This gap is even larger if compared to upper bound cases indicating that our supervised models can be further tuned and improved. Models with supervised or \wsup~attention also have a more narrow spread of results (\fig{\ref{fig:accuracy_cos_sim}}).
+
+
+
+\begin{figure}[thb]
+	\newcommand{\width}{0.28\textwidth}
+	\begin{center}
+		\begin{small}
+			\setlength{\tabcolsep}{3pt}
+			\begin{tabular}{cccc}
+				\multicolumn{4}{c}{
+					\includegraphics[width=0.95\textwidth, trim={1.5cm 1cm 3cm 10.5cm}, clip]{colors_init/legend.pdf}} \\
+				& \scriptsize bad initialization (cos.~sim.=-0.75) &\scriptsize
+				good initialization (cos.~sim.=0.75) &
+				\scriptsize optimal initialization (cos.~sim.=1.00) \\
+				\rotatebox[origin=c]{90}{\small \textsc{Unsupervised}} &
+				{\includegraphics[width=\width, align=c, trim={0cm 0cm 0.5cm 0cm}, clip]{colors_init/bad_unsup}} & %\hspace{0.5cm}
+				{\includegraphics[width=\width, align=c, trim={0cm 0cm 0.5cm 0cm}, clip]{colors_init/good1_unsup}} &
+				{\includegraphics[width=\width, align=c, trim={0cm 0cm 0.5cm 0cm}, clip]{colors_init/optimal4_unsup}} \\
+				& (a) & (b) & (c) \\
+				\rotatebox[origin=c]{90}{\small \textsc{Supervised}} &
+				{\includegraphics[width=\width, align=c, trim={0cm 0cm 0.5cm 0cm}, clip]{colors_init/bad_sup}} & %\hspace{0.5cm}
+				{\includegraphics[width=\width, align=c, trim={0cm 0cm 0.5cm 0cm}, clip]{colors_init/good1_sup}} &
+				{\includegraphics[width=\width, align=c, trim={0cm 0cm 0.5cm 0cm}, clip]{colors_init/optimal4_sup}} \\
+				& (d) & (e) & (f) \\
+			\end{tabular}
+		\end{small}
+		\vspace{-18pt}
+	\end{center}
+	\caption{\small Influence of initialization on training dynamics for \textsc{Colors} using GIN trained in unsupervised (a-c) and supervised (d-e) ways. The nodes that should be pooled according to our ground truth prior, must have larger attention values $\alpha$. However, in the unsupervised cases, only the model with an optimal initialization (c) reaches a high accuracy, while other models (a,b) are stuck in a suboptimal state and wrong nodes are pooled, which degrades performance. In the supervised cases (d-f), models converge to a perfect accuracy and initialization only affects the speed of convergence. In these experiments, we train models longer to see if they can recover from a bad initialization.}
+	\label{fig:training_curves_unsup}
+\end{figure}
+
+
+\densepar{What are the factors influencing performance of \gnns with attention?}
+We identify three key factors influencing performance of \gnns with attention: initialization of the attention model (i.e.~vector $\mathbf{p}$ or \gnn in \eqref{eq:attn_gcn}), strength of the main \gnn model (i.e.~the model that actually performs classification), and finally other hyperparameters of the attention and \gnn models.
+
+We highlight initialization as the critical factor. We ran 100 experiments on \colors~with random initializations (\fig{\ref{fig:accuracy_cos_sim}}, \textit{(a-e)}) of the vector $\mathbf{p}$ and measured how performance of both attention and classification is affected depending on how close (in terms of cosine similarity) the initialized $\mathbf{p}$ was to the optimal one, $\mathbf{p} = [0,1,0]$.
+We disentangle the dependency between the classification accuracy and cos.~sim. into two functions to make the relationship clearer (\fig{\ref{fig:accuracy_cos_sim}}, \textit{(a, c)}).
+Interestingly, we found that classification accuracy depends \textit{exponentially} on attention correctness and becomes close to 100\% only when attention is also close to being perfect. In the case of slightly worse attention, even starting from 99\%, classification accuracy drops significantly.
+This is an important finding that can also be valid for other more realistic applications. In the \textsc{Triangles} task we only partially confirm this finding, because our attention models could not achieve AUC high enough to boost classification. However, by observing the upper bound results obtained by training with ground truth attention, we assume that this boost potentially should happen once attention becomes accurate enough.\looseness=-1
+
+\begin{figure}[tbh]
+	\begin{center}
+		\small
+		\setlength{\tabcolsep}{0pt}
+		\begin{minipage}{.55\textwidth}
+		\begin{tabular}{cccc}
+			& \textsc{Test-Orig} & \textsc{Test-Noisy} & \textsc{Test-NoisyC} \\
+			\rotatebox[origin=c]{90}{\tiny \textsc{Input}} &
+			{\includegraphics[width=0.3\textwidth, align=c, trim={4cm 1cm 3cm 1cm}, clip]{cheb_weak_sup/fig_0.pdf}} &
+			{\includegraphics[width=0.3\textwidth, align=c, trim={4cm 1cm 3cm 1cm}, clip]{cheb_weak_sup/fig_1.pdf}} &
+			{\includegraphics[width=0.3\textwidth, align=c, trim={4cm 1cm 3cm 1cm}, clip]{cheb_weak_sup/fig_2.pdf}} \\
+
+			\rotatebox[origin=c]{90}{\tiny \textsc{DiffPool}} &
+			{\includegraphics[width=0.3\textwidth, align=c, trim={4cm 1cm 3cm 1cm}, clip]{cheb_diff_pool_clusters/fig_diffpool_3.pdf}} &
+			{\includegraphics[width=0.3\textwidth, align=c, trim={4cm 1cm 3cm 1cm}, clip]{cheb_diff_pool_clusters/fig_diffpool_4.pdf}} &
+			{\includegraphics[width=0.3\textwidth, align=c, trim={4cm 1cm 3cm 1cm}, clip]{cheb_diff_pool_clusters/fig_diffpool_5.pdf}} \\
+
+			\rotatebox[origin=c]{90}{$\mathbf{\alpha}^{WS}$} &
+			{\includegraphics[width=0.3\textwidth, align=c, trim={4cm 1cm 3cm 1cm}, clip]{cheb_global_max_heat/fig_heat_3.pdf}} &
+			{\includegraphics[width=0.3\textwidth, align=c, trim={4cm 1cm 3cm 1cm}, clip]{cheb_global_max_heat/fig_heat_3.pdf}} &
+			{\includegraphics[width=0.3\textwidth, align=c, trim={4cm 1cm 3cm 1cm}, clip]{cheb_global_max_heat/fig_heat_5.pdf}} \\
+
+			\rotatebox[origin=c]{90}{$\mathbf{\alpha}$} &
+			{\includegraphics[width=0.3\textwidth, align=c, trim={4cm 1cm 3cm 1cm}, clip]{cheb_weak_sup/fig_3.pdf}} &
+			{\includegraphics[width=0.3\textwidth, align=c, trim={4cm 1cm 3cm 1cm}, clip]{cheb_weak_sup/fig_4.pdf}} &
+			{\includegraphics[width=0.3\textwidth, align=c, trim={4cm 1cm 3cm 1cm}, clip]{cheb_weak_sup/fig_5.pdf}} \\
+		\end{tabular}
+		\end{minipage}
+%		\hspace{-2pt}
+		\begin{minipage}{0.35\textwidth}
+		\begin{tabular}{cc}
+			\multicolumn{2}{c}{\textsc{Triangles Test-Large}} \rule[-7pt]{0pt}{0pt} \\
+			{{\includegraphics[width=0.45\textwidth, align=c, trim={1cm 1cm 2cm 1.5cm}, clip]{cheb_weak_sup_triangles/triangles_test2_large.png}}} &
+			{\includegraphics[width=0.5\textwidth, align=c, trim={2cm 1cm 0cm 1.5cm}, clip]{cheb_weak_sup_triangles/triangles_test2_gt_pool_large.pdf}} \\
+			\tiny $N=93$ & \tiny $N=16$ \rule[-10pt]{0pt}{0pt} \\
+			{\includegraphics[width=0.45\textwidth, align=c, trim={1cm 1cm 2cm 1.5cm}, clip]{cheb_weak_sup_triangles/triangles_test2_pred_large.png}} &
+			{\includegraphics[width=0.5\textwidth, align=c, trim={2cm 1cm 0cm 1.5cm}, clip]{cheb_weak_sup_triangles/triangles_test2_pred_layer1_large.pdf}} \\
+			\tiny $N=93$ & \tiny $N=27$ \\
+		\end{tabular}
+		\end{minipage}
+	\end{center}
+	\vspace{-10pt}
+	\caption{\small Qualitative analysis. For \mnist~(on the left) we show examples of input test images (top row), results of DiffPool~\citep{ying2018hierarchical} (second row), attention weights $\mathbf{\alpha}^{WS}$ generated using a model with global pooling based on \eqref{eq:heat_maps} (third row), and $\mathbf{\alpha}$ predicted by our \wsup~model (bottom row). Both our attention-based pooling and DiffPool can be strong and interpretable depending on the task, but in our tasks DiffPool was inferior.
+	For \tri~(on the right) we show an example of a test graph with $N=93$ nodes with six triangles and the results of pooling based on ground truth attention weights $\mathbf{\alpha}^{GT}$ (top row); in the bottom row we show attention weights predicted by our \wsup~model and results of our threshold-based pooling \eqref{eq:top-k_ours}. Note that during training, our model has not encountered noisy images (\mnist) nor graphs larger than with $N=25$ nodes (\tri). }
+	\label{fig:attn_mnist}
+	\vspace{-1pt}
+\end{figure}
+
+\densepar{Why is the variance of some results so high?}
+In Table~\ref{table:results} we report high variance of results, which is mainly due to initialization of the attention model as explained above. This variance is also caused by initialization of other trainable parameters of a GNN, but we show that once the attention model is perfect, other parameters can recover from a bad initialization leading to better results. The opposite, however, is not true: we never observed recovery of a model with poorly initialized attention (\fig{\ref{fig:training_curves_unsup}}).\looseness=-1
+
+\densepar{How top-k compares to our threshold-based pooling method?}
+Our method to attend and pool nodes \eqref{eq:top-k_ours} is based on top-k pooling~\citep{graphunet2018} and we show that the proposed threshold-based pooling is superior in a principle way. When we use supervised attention our results are better by more than 40\% on \textsc{Colors-LargeC}, by 9\%  on \textsc{Triangles-Large} and by 3\% on \textsc{MNIST-75sp}. In \fig{\ref{fig:accuracy_cos_sim}} (\textit{(a,b)}-zoomed) we show that GIN and ChebyGIN models with supervised top-k pooling never reach an average accuracy of more than 80\% as opposed to our method which reaches 100\% in many cases.
+
+\densepar{How results change with increase of attention model input dimensionality or capacity?}
+We performed experiments using ChebyGIN-h - a model with higher dimensionality of an input to the attention model. In such cases, it becomes very unlikely to initialize it in a way close to optimal (\fig{\ref{fig:accuracy_cos_sim}}, \textit{(c-e)}), and attention accuracy is concentrated in the 60-80\% region. Effect of the attention model of such low accuracy is neglible or even harmful, especially on the large and noisy graphs. We also experimented with a deeper attention model (ChebyGIN-h), i.e. a 2 layer fully-connected layer with 32 hidden units for \colors~and \mnist, and a deeper \gnn \eqref{eq:attn_gcn} for \tri. This has a positive effect overall, except for \tri, where our attention models were already deep \gnns.\looseness-1
+
+\begin{figure}[htpb]
+	\vspace{-1pt}
+	\setlength{\tabcolsep}{0pt}
+	\begin{tabular}{ccccc}
+		{\includegraphics[width=0.2\textwidth, align=c, trim={0cm 0cm 0cm 0cm}, clip]{init/unsup_colors3.pdf}} &
+		{\includegraphics[width=0.2\textwidth, align=c, trim={0cm 0cm 0cm 0cm}, clip]{init/sup_colors3.pdf}} &
+		{\includegraphics[width=0.2\textwidth, align=c, trim={0cm 0cm 0cm 0cm}, clip]{init/wsup_colors3.pdf}} &
+		{\includegraphics[width=0.2\textwidth, align=c, trim={0cm 0cm 0cm 0cm}, clip]{init/acc_scale_cos_colors3.pdf}} &
+		{\includegraphics[width=0.2\textwidth, align=c, trim={0cm 0cm 0cm 0cm}, clip]{init/acc_scale_cos_colors3_gcn.pdf}}
+	\end{tabular}
+	\caption{\small Influence of distribution parameters used to initialize the attention model $\mathbf{p}$ in the \colors~task with $n=3$ dimensional features. We show points corresponding to the commonly used initialization strategies of \ul{Xavier}~\citep{he2015delving} and \ul{Kaiming}~\citep{he2015delving}. \textit{(a-c)} Shaded areas show range, bars show $\pm1$ std.}
+	\label{fig:init}
+	\vspace{-10pt}
+\end{figure}
+
+\densepar{Can we improve initialization of attention?}
+In all our experiments, we initialize $\mathbf{p}$ from the Normal distribution, ${\cal N}(0, 1)$. To verify if the performance can be improved by choosing another distribution, we evaluate GIN and GCN models on a wide range of random distributions, Normal ${\cal N}(0, \sigma)$ and Uniform $U(-\sigma, \sigma)$, by varying scale $\sigma$ (\fig{\ref{fig:init}}).
+We found out that for unsupervised training (\fig{\ref{fig:init}}, \textit{(a)}), larger initial values and the Normal distribution should be used to make it possible to converge to an optimal solution, which is still unlikely and greatly depends on cosine similarity with GT attention (\fig{\ref{fig:init}}, \textit{(d,e)}). For supervised and ``weak-sup'' attention, smaller initial weights and either the Normal or Uniform distribution should be used (\fig{\ref{fig:init}}, \textit{(b,c)}).
+
+
+\begin{table}[tbhp]%{R}{7.2cm}%[t]
+	%\vspace{-12pt}
+	\caption{\small \textbf{Results on the social (\collab) and molecule (\proteins~and \dd) datasets.} We use 3 layer GCNs~\citep{kipf2016semi} or ChebyNets~\citep{defferrard2016convolutional}. Dataset subscripts denote the maximum number of nodes in the training set according to our splits (\secref{\ref{sec:graph_data}}).\looseness-1}
+	\vspace{-10pt}
+	\scriptsize
+	\label{table:results_graphs}
+	\begin{center}
+		%\setlength{\tabcolsep}{2.4pt}
+		\begin{tabular}{lcccc}
+			\toprule
+			& \textbf{\collab}$_{35}$ & \textbf{\proteins}$_{25}$ & \textbf{\dd}$_{200}$ & \textbf{\dd}$_{300}$\Tstrut\Bstrut\\
+			\midrule \\
+			\# train / test graphs & 500 / 4500  & 500 / 613 & 462 / 716 & 500 / 678 \\
+			\# nodes ($N$) train & 32-35 & 4-25 & 30-200 & 30-300 \\
+			\# nodes ($N$) test & 32-492 & 6-620 & 201-5748 & 30-5748 \\
+			\hline \\
+			Global max & 65.9\std{3.4} & 74.4\std{1.0} & 29.7\std{4.9} & 72.7\std{3.6} \\
+			Unsup, ours & 65.7\std{3.5} & 75.6\std{1.4} & 51.9\std{5.3} & 77.2\std{2.9} \\
+			\hline \\
+			Weak-sup & \textbf{67.0\std{1.7}} & \textbf{76.2\std{0.7}} &  \textbf{54.3\std{5.0}} & \textbf{78.4\std{1.1}} \\
+			\bottomrule
+		\end{tabular}
+	\end{center}
+	%\vspace{-8pt}
+\end{table}
+
+
+
+
+\begin{figure}[tbhp]
+	\newcommand{\imgwidth}{0.17\textwidth}
+	\begin{center}
+		\small
+		\setlength{\tabcolsep}{3pt}
+		\begin{tabular}{cccccc}
+			& \small \textsc{Global pool} & \small \textsc{Unsup} & \small \textsc{Unsup pooled} & \small \textsc{Weak-sup} &  \small \textsc{Weak-sup pooled} \\
+			\rotatebox[origin=c]{90}{\small \collab$_{35}$} &
+			{\includegraphics[width=\imgwidth, align=c, trim={0 0 0 0}, clip]{collab/56_96_32nodes_0_0_global.pdf}} &
+			{\includegraphics[width=\imgwidth, align=c, trim={0 0 0 0}, clip]{collab/56_96_32nodes_0_1_unsup.pdf}} &
+			{\includegraphics[width=\imgwidth, align=c, trim={0 0 0 0}, clip]{collab/56_96_21nodes_0_1_unsup_pooled.pdf}} &
+			{\includegraphics[width=\imgwidth, align=c, trim={0 0 0 0}, clip]{collab/56_96_32nodes_0_0.pdf}} &
+			{\includegraphics[width=\imgwidth, align=c, trim={0 0 0 0}, clip]{collab/56_96_14nodes_0_0_pooled.pdf}} \\ \\
+			\rotatebox[origin=c]{90}{\small \proteins$_{25}$} &
+			{\includegraphics[width=\imgwidth, align=c, trim={0 0 0 0}, clip]{proteins/46_437_134nodes_0_0_global.pdf}} &
+			{\includegraphics[width=\imgwidth, align=c, trim={0 0 0 0}, clip]{proteins/46_437_134nodes_0_0_unsup.pdf}} &
+			{\includegraphics[width=\imgwidth, align=c, trim={0 0 0 0}, clip]{proteins/46_437_79nodes_0_0_unsup_pooled.pdf}} &
+			{\includegraphics[width=\imgwidth, align=c, trim={0 0 0 0}, clip]{proteins/46_437_134nodes_0_0.pdf}} &
+			{\includegraphics[width=\imgwidth, align=c, trim={0 0 0 0}, clip]{proteins/46_437_72nodes_0_0_pooled.pdf}} \\ \\
+			\rotatebox[origin=c]{90}{\small \dd$_{200}$} &
+			{\includegraphics[width=\imgwidth, align=c, trim={0 0 0 0}, clip]{dd/65_640_212nodes_1_1_global.pdf}} &
+			{\includegraphics[width=\imgwidth, align=c, trim={0 0 0 0}, clip]{dd/65_640_212nodes_1_1_unsup.pdf}} &
+			{\includegraphics[width=\imgwidth, align=c, trim={0 0 0 0}, clip]{dd/65_640_70nodes_1_1_unsup_pooled.pdf}} &
+			{\includegraphics[width=\imgwidth, align=c, trim={0 0 0 0}, clip]{dd/65_640_212nodes_1_1.pdf}} &
+			{\includegraphics[width=\imgwidth, align=c, trim={0 0 0 0}, clip]{dd/65_640_73nodes_1_1_pooled.pdf}} \\
+		\end{tabular}
+	\end{center}
+	\vspace{-10pt}
+	\caption{\small Qualitative results. In \collab, a graph represents an ego-network of a researcher, therefore \textit{center nodes} are important. In \proteins~and \dd, a graph is a protein and nodes are amino acids, so it is important to attend to a \textit{connected chain} of amino acids to distinguish an enzyme from a non-enzyme protein. Our \wsup~method attends to and pools more relevant nodes compared to global and unsupervised models, leading to better classification results. }
+	\label{fig:attn_graphs}
+\end{figure}
+
+\densepar{What is the recipe for more powerful attention \gnns?}
+We showed that \gnns with supervised training of attention are significantly more accurate and robust, although in case of a bad initialization it can take a long time to reach the performance of a better initialization.
+However, supervised attention is often infeasible. We suggested an alternative approach based on \wsup~training and validated it on our synthetic (Table~\ref{table:results}) and real (Table~\ref{table:results_graphs}) datasets. In case of \synthetic~we can compare to both unsupervised and supervised models and conclude that our approach shows performance, robustness and relatively low variation  (i.e. sensitivity to initialization) similar to supervised models and much better than unsupervised models. In case of \real~we can only compare to unsupervised and global pooling models and confirm that our method can be effectively employed for a wide diversity of graph classification tasks and attends to more relevant nodes (Figures~\ref{fig:attn_mnist} and~\ref{fig:attn_graphs}). Tuning the distribution and scale $\sigma$ for the initialization of attention can further improve results. For instance, on \proteins~for the \wsup~case, we obtain 76.4\% as opposed to 76.2\%.\looseness-1
+
+\section{Conclusion}
+%\vspace{-10pt}
+We have shown that learned attention can be extremely powerful in graph neural networks, but only if it is close to optimal. This is difficult to achieve due to the sensitivity of initialization, especially in the unsupervised setting where we do not have access to ground truth attention. Thus, we have identified initialization of attention models for high dimensional inputs as an important open issue.
+We also show that attention can make \gnns more robust to larger and noisy graphs, and that the weakly-supervised approach proposed in our work brings advantages similar to the ones of supervised models, yet at the same time can be effectively applied to datasets without annotated attention.
+
+\vfill
+\clearpage
+
